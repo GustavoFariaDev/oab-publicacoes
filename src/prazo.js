@@ -121,7 +121,7 @@ export function emRecesso(d) {
 
 /**
  * Codigo da comarca de origem: os 4 ultimos digitos do numero CNJ.
- * "1039487-77.2024.8.26.0564" -> "0564" (Sao Bernardo do Campo).
+ * "1000000-00.2024.8.26.0100" -> "0100".
  */
 export function comarcaDoProcesso(numeroProcesso = '') {
   const digitos = String(numeroProcesso).replace(/\D/g, '');
@@ -266,7 +266,7 @@ export function prazosDeclarados(texto = '') {
  * SO projeta vencimento quando o texto declara UM prazo. Com mais de um, lista
  * os prazos citados e nao arrisca data — e a regra mais importante deste
  * arquivo, e veio de um caso real (DESPACHO de 12/08/2026, processo
- * 4047179-45.2026.8.26.0002). Aquele texto cita quatro prazos, e NENHUM deles
+ * 4000000-00.2026.8.26.0000). Aquele texto cita quatro prazos, e NENHUM deles
  * era do advogado na data da publicacao:
  *
  *   "o perito devera se manifestar ... em cinco dias"      -> do perito

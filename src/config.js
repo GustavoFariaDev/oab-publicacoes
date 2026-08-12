@@ -93,12 +93,12 @@ export const config = {
   /**
    * Feriados que valem em UMA comarca so — aniversario da cidade, padroeira.
    *
-   * Formato: "0564:20/08/2026,15/09/2026;0554:08/04/2026", onde 0564 e o codigo
-   * de origem do processo (os 4 ultimos digitos do numero CNJ).
+   * Formato: "0100:20/08/2026,15/09/2026;0200:08/04/2026", onde o codigo sao os
+   * 4 ultimos digitos do numero CNJ do processo (a unidade de origem).
    *
    * Separado do FERIADOS_EXTRA por necessidade, nao por organizacao: o
-   * aniversario de Sao Bernardo nao e feriado em Campinas, e aplicar a data em
-   * todo mundo empurraria o vencimento dos processos das outras comarcas para
+   * aniversario de uma cidade nao e feriado na comarca vizinha, e aplicar a
+   * data em todo mundo empurraria o vencimento dos processos das outras para
    * frente — exatamente a direcao que faz perder prazo.
    *
    * @returns {Map<string, string[]>} codigo da comarca -> datas dd/mm/aaaa

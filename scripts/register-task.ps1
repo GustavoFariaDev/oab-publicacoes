@@ -12,9 +12,9 @@ $ErrorActionPreference = 'Stop'
 $ProjectDir = Split-Path -Parent $PSScriptRoot
 $LinkPath   = 'D:\oab-pubs'
 
-# O caminho real tem acento e espaco ("Programação VS\automação OAB Publicaçoes").
-# O Agendador quebra em silencio com isso, entao a tarefa aponta para um
-# junction em ASCII. O projeto continua morando onde esta.
+# Se o caminho do projeto tiver acento ou espaco, o Agendador de Tarefas
+# quebra em silencio com mais frequencia do que deveria. Por isso a tarefa
+# aponta para um junction em ASCII puro; o projeto continua morando onde esta.
 if (-not (Test-Path $LinkPath)) {
     Write-Host "Criando junction $LinkPath -> $ProjectDir"
     New-Item -ItemType Junction -Path $LinkPath -Target $ProjectDir | Out-Null

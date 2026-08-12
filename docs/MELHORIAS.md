@@ -56,25 +56,19 @@ https://comunicaapi.pje.jus.br/api/v1/comunicacao/{hash}/certidao
 
 ## Médio valor
 
-### 5. Testes de `state.js` e `merge.js`
+### ~~5. Testes de `state.js` e `merge.js`~~ — FEITO
 
-**Hoje:** só a contagem de prazo tem teste automatizado (76 verificações). O estado e a união de fontes foram testados à mão, com um arquivo temporário que escrevia no `state.json` **real** e precisou de backup — por isso não ficou no repositório.
+O caminho do estado ficou injetável (`STATE_PATH`), então as regras que decidem se um dia é reenviado ou esquecido passaram a rodar contra um arquivo descartável — antes só dava para exercitá-las escrevendo no `state.json` de produção, com backup à mão. Cobertas também a união entre fontes e a checagem de saúde: **155 verificações** em `npm run teste`.
 
-**O que fazer:** tornar o caminho do estado injetável (parâmetro ou variável de ambiente) para o teste usar um arquivo descartável. Aí dá para cobrir: canal faltando, fonte incompleta, registro antigo sem os campos novos, dia vazio.
+### ~~6. Aviso de silêncio ("hoje não chegou nada")~~ — FEITO
 
-**Ganho:** essas regras decidem se um dia é reenviado ou esquecido. Hoje elas só têm o comentário e a revisão como rede.
+Virou a checagem das 18h (`npm run checar`). Alerta só quando o dia não fechou; dia certo não gera mensagem.
 
-### 6. Aviso de silêncio ("hoje não chegou nada")
+**O que ficou de fora:** a checagem mora na mesma máquina que ela vigia. PC desligado o dia inteiro, ela não roda na hora (dispara quando a máquina voltar, tarde). Falha total — máquina fora e todos os canais mortos — só um vigia externo cobriria.
 
-**Ganho:** hoje, PC desligado o dia inteiro = nenhuma mensagem e nenhum aviso. O silêncio é indistinguível de um dia sem publicação. Uma verificação semanal, ou um "nada a relatar" de fim de dia, fecharia esse buraco.
+### ~~7. Limpeza do `state.json` e dos `logs/`~~ — FEITO
 
-**Custo:** baixo, mas exige decidir o incômodo aceitável — mensagem todo dia sem publicação vira ruído, e ruído é o que faz um alerta ser ignorado no dia em que importa.
-
-### 7. Limpeza do `state.json` e dos `logs/`
-
-**Hoje:** os dois só crescem. `state.json` guarda os ids de todo dia, para sempre.
-
-**Custo:** baixo. Apagar dias com mais de ~90 dias resolve. Não é urgente: o volume é de dezenas de ids por dia.
+`state.json` poda dias com mais de 120 e grava por arquivo temporário + rename (queda no meio da escrita não deixa JSON pela metade). `logs/` apaga arquivo com mais de 90 dias.
 
 ### 8. Checagem da sessão do WhatsApp antes das 14h
 

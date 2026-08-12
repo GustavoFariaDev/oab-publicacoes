@@ -11,55 +11,51 @@ Estado em **12/08/2026, 15h30**. Cada item diz o que é, o que custa deixar como
 
 ---
 
-## 1. O prazo não aparece no corpo do e-mail
+## ~~1. Prazo só no WhatsApp e no PDF~~ — RESOLVIDO em 12/08/2026
 
-**Estado:** as datas calculadas saem no WhatsApp e no PDF anexo. O corpo do e-mail lista título, processo, vara e jornal — sem prazo.
-
-**O que custa:** o e-mail é o canal mais confiável dos dois (SMTP puro, sem biblioteca não-oficial, com autenticação de verdade). Quem lê só o corpo do e-mail não vê vencimento nenhum, e o PDF exige abrir o anexo.
-
-**O que fazer:** `src/mailer.js` já recebe as publicações; falta chamar `calcularPrazo` e imprimir com a mesma ressalva do WhatsApp. **Custo baixo.**
+O corpo do e-mail listava título, processo, vara e jornal, sem prazo nenhum — quem lesse só ele precisava abrir o anexo para saber de vencimento. Agora traz vencimento, início da contagem, prazos ambíguos e as partes, com a mesma ressalva do WhatsApp. Vermelho só onde há data: cor de alarme em tudo é o mesmo que cor de alarme em nada.
 
 ---
 
-## 2. A janela do Chrome precisa estar aberta às 14h, todo dia
+## ~~2. Chrome precisava estar aberto às 14h~~ — RESOLVIDO em 12/08/2026
 
-**Estado:** o portal é lido por um Chrome que **você** abriu com `npm run abrir-chrome`. Se a janela estiver fechada às 14h — PC reiniciado, janela fechada sem querer — o portal falha.
+Resolvido no lugar certo, e não por uma tarefa agendada extra: `src/chrome.js` sobe a janela com porta de depuração quando ela não está de pé, e `conectarChromeAberto()` chama isso antes de conectar. Testado com o Chrome morto à força — abriu com a sessão salva e leu o portal sem clique humano.
 
-**O que custa:** não quebra a automação (o aviso "FONTE INDISPONÍVEL" sai junto com o que o CNJ trouxer, e o dia fica em aberto para os retries), mas aquele dia sai sem MG, sem União e sem as publicações que só o portal tem — que em 12/08 foram 2 de 7.
+Uma tarefa às 13h50 chegou a ser proposta, mas seria mais uma peça capaz de falhar sozinha para resolver algo que se resolve na hora do uso.
 
-**O que fazer:** uma tarefa agendada às 13h50 que abra o Chrome se a porta 9222 não estiver respondendo. A sessão fica salva em `chrome-profile/`, então normalmente sobe já logada, sem clique humano. Se o Cloudflare pedir o desafio de novo, aí sim precisa de você — e é bom que o aviso apareça.
+**O que ainda depende de você:** se o Cloudflare voltar a exigir o desafio, ou se a sessão do portal cair, aí sim precisa de um clique humano — e o aviso chega pelos dois canais.
 
 ---
 
 ## ~~3. Feriados locais fora da conta de prazo~~ — PREENCHIDO em 12/08/2026
 
-Calendário do TJSP conferido na fonte, comarca de **São Bernardo do Campo**. Das 19 datas do Provimento CSM 2.813/2025, o código já cobria 10 (nacionais fixos + móveis da Páscoa); as outras 9 entraram no `.env`.
+Calendário do TJSP conferido na fonte. Das 19 datas de uma comarca, o código já cobria 10 (nacionais fixos + móveis da Páscoa); as outras entraram no `.env`.
 
-**Uma delas não podia entrar junto com as outras.** `20/08/2026 — ANIVERSÁRIO DA CIDADE` é a única da lista sem referência ao Provimento: vale só em São Bernardo. Como o `FERIADOS_EXTRA` é global, colá-la ali trataria 20/08 como feriado também nos processos de Campinas, Sumaré e da capital — empurrando o vencimento deles para frente, a direção que perde prazo.
+**Nem toda data podia entrar junto com as outras.** As linhas marcadas com "(PROVIMENTO CSM Nº 2.813/2025)" valem em todo o estado; a que aparece **sem** essa referência é municipal — aniversário ou fundação da cidade — e vale só naquela comarca. Como o `FERIADOS_EXTRA` é global, colar uma data municipal ali a aplicaria também aos processos das outras comarcas, empurrando o vencimento deles para frente: a direção que perde prazo.
 
-Por isso existe agora `FERIADOS_COMARCA`, que amarra a data ao código de origem do processo (os 4 últimos dígitos do número CNJ):
+Por isso existe `FERIADOS_COMARCA`, que amarra a data ao código de origem do processo (os 4 últimos dígitos do número CNJ):
 
 ```env
+# valem no estado inteiro
 FERIADOS_EXTRA=02/04/2026,20/04/2026,05/06/2026,09/07/2026,10/07/2026,28/10/2026,07/12/2026,08/12/2026
-FERIADOS_COMARCA=0564:20/08/2026;0554:08/04/2026
+
+# valem só na comarca indicada
+FERIADOS_COMARCA=0100:20/08/2026;0200:08/04/2026
 ```
 
-| Comarca | Código | Feriado municipal 2026 |
-|---|---|---|
-| São Bernardo do Campo | `0564` | 20/08 — Aniversário da Cidade |
-| Santo André | `0554` | 08/04 — Fundação da Cidade (quarta) |
+Duas comarcas foram conferidas na fonte. Em ambas, as 18 datas estaduais são idênticas — a única diferença entre os calendários é a data municipal. Verificado que cada uma delas é dia não útil na sua comarca e **dia útil na vizinha**.
 
-As duas listas estaduais batem exatamente; a diferença entre os calendários é só a data municipal. Conferido: as 19 datas de cada comarca são dia não útil nela, e o feriado de uma não vale na outra.
+Medido com uma publicação real: 15 dias úteis a partir de 14/08 vencem **04/09 na comarca com feriado municipal no meio** e **03/09 na que não tem**. Mesma publicação, mesma regra, datas diferentes — como tem que ser.
 
-Medido: 15 dias úteis a partir de 14/08 vencem **04/09 em São Bernardo** e **03/09 em Campinas**. Mesma publicação, mesma regra, datas diferentes — como tem que ser.
+**Em janeiro de 2027:** repetir. Novo Provimento, novas pontes, e o calendário municipal muda de ano.
 
-**Em janeiro de 2027:** repetir o processo. Novo Provimento, novas pontes, e o calendário municipal muda de ano.
+As comarcas configuradas ficam no `.env`, que não vai para o repositório — aqui só o mecanismo.
 
 ---
 
 ## 3b. As demais comarcas ainda não foram conferidas
 
-**Estado:** São Bernardo (`0564`) e Santo André (`0554`) conferidos. Os processos de Campinas (`0114`), Sumaré (`0604`) e da capital (`0100`, `0002`) contam apenas com os feriados estaduais.
+**Estado:** duas comarcas conferidas. Processos originados em outras contam apenas com os feriados estaduais.
 
 **O que custa:** um feriado municipal dessas comarcas não é considerado → o vencimento sai **um dia adiantado**. É a direção segura, e a ressalva já está em toda saída — mas é ruído evitável.
 
@@ -87,7 +83,7 @@ Por isso não se cola lista de feriado sem conferir. Chegou a haver `08/12/2026`
 **O que fazer** (10 minutos, uma vez por ano):
 
 1. Abrir o [Expediente Forense do TJSP](https://www.tjsp.jus.br/CanaisComunicacao/Feriados/ExpedienteForense)
-2. Selecionar **a sua comarca** (São Bernardo, Santo André — cada uma tem as suas)
+2. Selecionar **a comarca** dos seus processos (cada uma tem o seu calendário)
 3. Copiar as datas de 2026 sem expediente
 4. Preencher `FERIADOS_EXTRA=dd/mm/aaaa,dd/mm/aaaa` no `.env`
 

@@ -15,7 +15,7 @@ Perder uma publicação é perder prazo processual. A conferência manual é di�
 
 ## O que ele faz, em ordem
 
-1. Abre o Chrome com um perfil salvo e entra no portal (loga sozinho se a sessão caiu).
+1. Abre o Chrome com o perfil salvo, se a janela não estiver de pé (a sessão do portal fica salva; login e Cloudflare são humanos, uma vez).
 2. Vai em *Histórico → Publicações por Data*.
 3. Coloca **data inicial = data final = hoje** e clica **Consultar**.
 4. Clica em **Visualizar tudo** — nunca em "Visualizar selecionados".
@@ -23,7 +23,8 @@ Perder uma publicação é perder prazo processual. A conferência manual é di�
 6. Gera um **PDF** com tudo e um **print** da tela, salvos em `out/AAAA-MM-DD/`.
 7. Manda o **e-mail** com PDF + print anexos.
 8. Manda o **WhatsApp** com um resumo curto + o PDF.
-9. Anota no `state.json` o que já foi enviado.
+9. Anota no `state.json` o que já foi enviado, por qual canal, e se as fontes vieram inteiras.
+10. Às 18h, confere se o dia fechou — e só fala se não fechou.
 
 Se não houver publicação nenhuma, ele **avisa mesmo assim** ("nenhuma publicação hoje"). Silêncio nunca é ambíguo: se você não recebeu nada, é porque algo quebrou — não porque o dia estava vazio.
 
@@ -62,7 +63,7 @@ A solução é inverter: `npm run abrir-chrome` inicia o Chrome como um **proces
 
 O clique no desafio é sempre seu. Nada no projeto tenta resolver o Turnstile automaticamente.
 
-### 2. Por que "Visualizar tudo", e não marcar os quadradinhos
+### 3. Por que "Visualizar tudo", e não marcar os quadradinhos
 
 **Um mesmo dia pode ter mais de um card.** Nos seus prints:
 
@@ -80,24 +81,29 @@ Por isso: filtro travado em hoje→hoje + **Visualizar tudo**. E, por cima disso
 
 Ao unir as duas fontes é preciso decidir quando dois registros são "o mesmo ato". Essa regra quase custou caro: uma primeira versão comparava os 120 primeiros caracteres do texto e **fundiu duas publicações reais numa só**.
 
-O caso real: em 11/08/2026, o processo `1000130-40.2026.5.02.0467` tem **duas notificações distintas** (`numeroComunicacao` 33004 e 33005, textos de 1203 e 1219 caracteres). Os primeiros 160 caracteres são idênticos, porque o cabeçalho da vara é padronizado. Deduplicar por prefixo apagava uma delas.
+O caso real: um processo trabalhista com **duas notificações distintas no mesmo dia** — `numeroComunicacao` diferentes, textos de 1203 e 1219 caracteres. Os primeiros 160 caracteres são idênticos, porque o cabeçalho da vara é padronizado. Deduplicar por prefixo apagava uma delas.
 
 Regra atual, em `src/merge.js`:
 - **Dentro de uma mesma fonte, nada é fundido.** A fonte já distingue os próprios registros.
-- **Entre fontes**, só funde com similaridade ≥ 0,9 do texto inteiro.
+- **Entre fontes**, funde por **identificador do documento** quando ele existe — o portal mostra o mesmo número que a API devolve como `id`, e isso é prova, não indício.
+- Sem identificador, funde por **contenção** do texto (quanto do menor cabe dentro do maior), com piso de tamanho para texto curto não casar com qualquer coisa.
+
+A contenção substituiu o Jaccard depois de uma medição: o portal corta a intimação em ~986 caracteres, e cinco pares reais da mesma publicação davam Jaccard de 0,18 a 0,82 — abaixo de qualquer limiar útil — contra contenção de 0,97 a 1,00. Jaccard pergunta "estes dois textos são o mesmo?"; aqui a pergunta é "este resumo é o começo daquele inteiro teor?".
 
 O erro é assimétrico e a regra assume esse lado: na dúvida, mantém as duas.
 
-### 5. Por que só WhatsApp, por enquanto
+### 5. Dois canais, independentes — e por que isso não é luxo
 
-A conta Gmail usada no teste não conseguiu gerar Senha de app (a página `/apppasswords` responde *"configuração não disponível para sua conta"*). Em vez de deixar a automação parada esperando isso, os canais viraram configuráveis por `CANAIS` no `.env`, e o WhatsApp — que só depende do QR, nada do Google — passou a rodar sozinho.
+`CANAIS` no `.env` decide por onde as publicações (e os avisos de falha) saem: `whatsapp`, `email` ou os dois. Cada canal falha isolado, e um canal caído nunca impede o outro de entregar.
 
-Duas consequências que o código precisou absorver:
+O projeto rodou um tempo só com WhatsApp, porque a Senha de app do Google ainda não existia. Funcionava — e escondia um ponto cego que só apareceu na prática: **o aviso de falha saía pelo mesmo canal que podia estar falhando**. Um dia sem mensagem era indistinguível de um dia sem publicação, e foi exatamente essa ambiguidade que custou meia hora de diagnóstico no dia em que o WhatsApp parou de confirmar entrega.
 
-- **O aviso de erro também sai pelo zap** (`enviarWhatsAppDeErro`). Sem isso, com o e-mail desligado uma falha não teria por onde avisar, e silêncio voltaria a ser ambíguo — que é justamente o que este projeto não aceita.
-- **Se nenhum canal entregar, o dia não conta como enviado.** O `index.js` levanta erro, o `state.json` fica sem `enviadoEm` e o retry das 16h refaz o envio inteiro. Antes, o e-mail sozinho decidia isso.
+Duas regras que o código carrega por causa disso:
 
-**Isto não substitui o e-mail — adia.** O `whatsapp-web.js` é não-oficial e a sessão cai sozinha; enquanto ele for o único canal, uma sessão derrubada é uma publicação perdida sem backup. Assim que a Senha de app existir (ou o OAuth2 da Gmail API), basta `CANAIS=whatsapp,email` — nenhuma linha de código muda.
+- **O aviso de erro sai por todos os canais ligados**, cada um em `try` próprio: o canal caído é justamente o suspeito, e não pode levar junto o aviso que sairia pelo outro.
+- **Se nenhum canal entregar, o dia não conta como enviado.** O `index.js` levanta erro, o `state.json` fica sem `enviadoEm` e o retry refaz o envio.
+
+O e-mail é a fonte da verdade: SMTP com autenticação de verdade, sem biblioteca não-oficial no meio. O WhatsApp é o atalho no celular.
 
 ### Guard-rail de contagem
 
@@ -115,17 +121,17 @@ A ideia é que uma falha de extração **apareça**, em vez de virar um e-mail b
 ### Instalação (uma vez)
 
 ```bash
-cd "D:\Programação VS\automação OAB Publicaçoes"
+cd caminho/do/projeto
 npm install
 ```
 
-Não é preciso baixar o Chromium do Playwright: o robô usa o **Chrome que já está instalado** na máquina (`channel: 'chrome'`), justamente porque o Chrome de verdade passa pela Cloudflare com muito mais frequência do que o Chromium de teste.
+Não é preciso baixar o Chromium do Playwright: o robô usa o **Chrome que já está instalado** na máquina, aberto como processo comum do sistema. O Playwright entra só para ler a página por CDP — ver a seção sobre o Turnstile acima.
 
 ### Configurar credenciais
 
 Copie `.env.example` para `.env` e preencha. **O `.env` nunca vai pro Git** — está no `.gitignore`.
 
-**Canais de envio.** `CANAIS` no `.env` decide por onde as publicações (e os avisos de falha) saem: `whatsapp`, `email` ou `whatsapp,email`. Hoje está em **`whatsapp`** — ver "Por que só WhatsApp, por enquanto" abaixo.
+**Canais de envio.** `CANAIS` no `.env` decide por onde as publicações (e os avisos de falha) saem: `whatsapp`, `email` ou `whatsapp,email`. Com os dois ligados, um canal caído não impede o outro de entregar.
 
 Pro e-mail você precisa de uma **Senha de app** do Google (não é a senha normal da conta):
 Conta Google → Segurança → Verificação em duas etapas → **Senhas de app** → gerar → colar em `SMTP_PASS`.
@@ -136,7 +142,7 @@ Conta Google → Segurança → Verificação em duas etapas → **Senhas de app
 npm run abrir-chrome
 ```
 
-Abre uma janela do Chrome normal, com perfil próprio (`chrome-profile/`). **Nela**: clique em "Confirme que é humano" (Cloudflare), faça o login e vá até a tela de publicações. **Deixe a janela aberta** — o robô se conecta a ela para ler.
+Abre uma janela do Chrome normal, com perfil próprio (`chrome-profile/`). **Nela**: clique em "Confirme que é humano" (Cloudflare) e faça o login. Depois disso o robô reabre essa janela sozinho quando precisar — a sessão fica salva e costuma durar semanas.
 
 Esse é o **único** caminho de entrada no portal. Não existe mais um login automatizado paralelo: o Chrome lançado pelo Playwright é reprovado pelo Turnstile mesmo com você clicando na caixa, e manter os dois caminhos apontando para o mesmo `chrome-profile/` só criava dúvida sobre qual sessão tinha ficado salva.
 
@@ -186,10 +192,10 @@ Qualquer "não" aí deixa o dia em aberto para o retry.
 
 Um detalhe do item 2: o canal que ficou para trás recebe o **dia inteiro**, não só o que faltava — e por isso o canal que já estava em dia pode receber repetido quando os dois envios se cruzam. É a troca certa: duplicata é chateação, publicação faltando é prazo.
 
-**Sobre o caminho com acentos.** `D:\Programação VS\automação OAB Publicaçoes` tem acento e espaço, e o Agendador de Tarefas quebra em silêncio com isso mais vezes do que deveria. O script de registro cria um atalho de sistema sem acento:
+**Sobre o caminho com acentos.** Se a pasta do projeto tiver acento ou espaço no nome, o Agendador de Tarefas quebra em silêncio com mais frequência do que deveria. O script de registro cria um atalho de sistema em ASCII puro:
 
 ```
-mklink /J D:\oab-pubs "D:\Programação VS\automação OAB Publicaçoes"
+mklink /J D:\oab-pubs "caminho\real\do\projeto"
 ```
 
 O projeto continua morando onde está — só o Agendador enxerga o caminho `D:\oab-pubs`.
@@ -224,9 +230,9 @@ Cada publicação sai no WhatsApp e no PDF com as datas calculadas a partir da d
 
 Feriados: nacionais fixos, mais os móveis derivados da Páscoa (carnaval, Sexta-feira Santa, Corpus Christi) pelo algoritmo de Meeus, mais o **recesso de 20/12 a 20/01** (art. 220). Feriado estadual, municipal ou forense entra à mão em `FERIADOS_EXTRA` no `.env` — não há fonte offline confiável para eles.
 
-**O vencimento só é calculado quando o texto declara um único prazo.** Quando o ato cita vários, o robô lista os prazos e não arrisca data. Isso não é excesso de cautela: o DESPACHO de 12/08/2026 no processo 4047179-45.2026.8.26.0002 cita quatro prazos — cinco dias e trinta dias do *perito*, dez dias para os *esclarecimentos dele*, e quinze dias das partes que só correm **depois da entrega do laudo**. Nenhum era do advogado naquele dia. Uma versão anterior escolhia o menor e teria estampado "vence 20/08/2026", data de ninguém. Data falsa gasta a confiança no aviso, e no dia em que o vencimento for verdadeiro ele vai parecer mais um palpite.
+**O vencimento só é calculado quando o texto declara um único prazo.** Quando o ato cita vários, o robô lista os prazos e não arrisca data. Isso não é excesso de cautela: o DESPACHO de 12/08/2026 no processo 4000000-00.2026.8.26.0000 cita quatro prazos — cinco dias e trinta dias do *perito*, dez dias para os *esclarecimentos dele*, e quinze dias das partes que só correm **depois da entrega do laudo**. Nenhum era do advogado naquele dia. Uma versão anterior escolhia o menor e teria estampado "vence 20/08/2026", data de ninguém. Data falsa gasta a confiança no aviso, e no dia em que o vencimento for verdadeiro ele vai parecer mais um palpite.
 
-O que a conta **não** sabe, e por isso todo vencimento sai marcado como estimativa: feriado local, suspensão do tribunal, prazo em dobro (Fazenda, DP, litisconsortes) e de quem é o prazo. `npm run teste` roda as 51 verificações dessa lógica.
+O que a conta **não** sabe, e por isso todo vencimento sai marcado como estimativa: feriado local, suspensão do tribunal, prazo em dobro (Fazenda, DP, litisconsortes) e de quem é o prazo. `npm run teste` roda as 155 verificações do projeto.
 
 ---
 

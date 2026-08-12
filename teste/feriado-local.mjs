@@ -7,9 +7,9 @@
  * passa sozinho e falha em conjunto.
  */
 process.env.FERIADOS_EXTRA = '17/08/2026';
-// 0564 = Sao Bernardo do Campo. 21/08 nao e feriado em lugar nenhum de
-// verdade: aqui ele existe so para provar o isolamento entre comarcas.
-process.env.FERIADOS_COMARCA = '0564:21/08/2026;0554:24/08/2026';
+// Codigos e datas ficticios: existem so para provar o isolamento entre
+// comarcas. 0100 e 0200 aqui nao representam comarca nenhuma de verdade.
+process.env.FERIADOS_COMARCA = '0100:21/08/2026;0200:24/08/2026';
 
 const { calcularPrazo, ehDiaUtil, deBR, resumirPrazo, feriadosLocaisNoIntervalo, comarcaDoProcesso } =
   await import('../src/prazo.js');
@@ -76,31 +76,31 @@ eq('PDF diz para que lado o erro cai', texto.includes('vencimento real é ANTES'
 // --- Feriado de comarca vale SO na comarca dela ---
 // Aplicar aniversario de cidade em todo mundo empurraria o vencimento dos
 // processos das outras comarcas para frente — a direcao que perde prazo.
-eq('le a comarca do numero CNJ', comarcaDoProcesso('1039487-77.2024.8.26.0564'), '0564');
+eq('le a comarca do numero CNJ', comarcaDoProcesso('1000000-00.2024.8.26.0100'), '0100');
 eq('numero vazio nao quebra', comarcaDoProcesso(''), '');
 
-eq('feriado da comarca vale nela', ehDiaUtil(deBR('21/08/2026'), '0564'), false);
-eq('e NAO vale na comarca vizinha', ehDiaUtil(deBR('21/08/2026'), '0114'), true);
+eq('feriado da comarca vale nela', ehDiaUtil(deBR('21/08/2026'), '0100'), false);
+eq('e NAO vale na comarca vizinha', ehDiaUtil(deBR('21/08/2026'), '0900'), true);
 eq('sem comarca, so os globais valem', ehDiaUtil(deBR('21/08/2026')), true);
-eq('feriado global vale em qualquer comarca', ehDiaUtil(deBR('17/08/2026'), '0114'), false);
+eq('feriado global vale em qualquer comarca', ehDiaUtil(deBR('17/08/2026'), '0900'), false);
 
 // Mesmo dia, mesmo prazo, comarcas diferentes -> datas diferentes.
 const base = { dataDisponibilizacao: '12/08/2026', intimacao: 'prazo de 5 dias' };
-const emSBC = calcularPrazo({ ...base, numeroProcesso: '1039487-77.2024.8.26.0564' });
-const emCampinas = calcularPrazo({ ...base, numeroProcesso: '1010649-48.2026.8.26.0114' });
-// Inicio 14/08 (sex). Globais tiram 17/08. Em SBC tambem sai 21/08.
-// SBC:      14, 18, 19, 20, 24 -> 24/08.  Campinas: 14, 18, 19, 20, 21 -> 21/08.
-eq('comarca com feriado proprio vence depois', emSBC.fatal, '24/08/2026');
-eq('comarca sem ele vence antes', emCampinas.fatal, '21/08/2026');
-eq('e a saida de SBC cita as duas datas', emSBC.feriadosLocais, ['17/08/2026', '21/08/2026']);
-eq('a de Campinas cita so a global', emCampinas.feriadosLocais, ['17/08/2026']);
+const naComarcaA = calcularPrazo({ ...base, numeroProcesso: '1000000-00.2024.8.26.0100' });
+const naComarcaB = calcularPrazo({ ...base, numeroProcesso: '2000000-00.2026.8.26.0200' });
+// Inicio 14/08 (sex). O global tira 17/08 das duas. Na comarca A sai 21/08.
+// A: 14, 18, 19, 20, 24 -> 24/08.   B: 14, 18, 19, 20, 21 -> 21/08.
+eq('comarca com feriado proprio vence depois', naComarcaA.fatal, '24/08/2026');
+eq('comarca sem ele vence antes', naComarcaB.fatal, '21/08/2026');
+eq('a saida da comarca A cita as duas datas', naComarcaA.feriadosLocais, ['17/08/2026', '21/08/2026']);
+eq('a da comarca B cita so a global', naComarcaB.feriadosLocais, ['17/08/2026']);
 
 // --- Duas comarcas configuradas nao se contaminam ---
 // Cada uma tem o SEU feriado municipal, e o da vizinha nao vale.
-eq('feriado de 0564 nao vale em 0554', ehDiaUtil(deBR('21/08/2026'), '0554'), true);
-eq('feriado de 0554 nao vale em 0564', ehDiaUtil(deBR('24/08/2026'), '0564'), true);
-eq('cada uma respeita o seu', [ehDiaUtil(deBR('21/08/2026'), '0564'), ehDiaUtil(deBR('24/08/2026'), '0554')], [false, false]);
-eq('comarca nao configurada nao herda nada', [ehDiaUtil(deBR('21/08/2026'), '0114'), ehDiaUtil(deBR('24/08/2026'), '0114')], [true, true]);
+eq('feriado da comarca A nao vale na B', ehDiaUtil(deBR('21/08/2026'), '0200'), true);
+eq('feriado da comarca B nao vale na A', ehDiaUtil(deBR('24/08/2026'), '0100'), true);
+eq('cada uma respeita o seu', [ehDiaUtil(deBR('21/08/2026'), '0100'), ehDiaUtil(deBR('24/08/2026'), '0200')], [false, false]);
+eq('comarca nao configurada nao herda nada', [ehDiaUtil(deBR('21/08/2026'), '0900'), ehDiaUtil(deBR('24/08/2026'), '0900')], [true, true]);
 
 console.log(`\n${ok} ok, ${mal} falha(s)`);
 process.exitCode = mal ? 1 : 0;

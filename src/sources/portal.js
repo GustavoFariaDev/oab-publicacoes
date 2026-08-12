@@ -266,7 +266,7 @@ async function extrairCard(card) {
   // Ler o cabecalho inteiro e recortar por regex NAO funciona: os <li> ficam
   // dentro de um <span>, que e inline, entao o innerText nao poe quebra de
   // linha entre eles. Um "(.*)" apos o rotulo engolia todos os campos
-  // seguintes: "Numero do processo" saia como "1039487-77.2024.8.26.0564
+  // seguintes: "Numero do processo" saia como "1000000-00.2024.8.26.0100
   // Pagina: 00001", e nenhuma publicacao casava com a mesma vinda da API.
   const valores = new Map();
   for (const item of await card.locator(`${SEL.cabecalhoCard} li`).allInnerTexts()) {

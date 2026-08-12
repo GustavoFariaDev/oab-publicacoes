@@ -111,7 +111,7 @@ const truncado = (texto = '') => /\.\.\.\s*$/.test(texto);
  * Entre os textos das duas fontes para a MESMA publicacao, qual fica.
  *
  * Comprimento sozinho nao serve, e o caso real esta em 12/08/2026, processo
- * 4008232-46.2025.8.26.0554: a API entregou 470 caracteres inteiros e o portal
+ * 4000001-00.2025.8.26.0000: a API entregou 470 caracteres inteiros e o portal
  * 986 truncados. "Fica o maior" escolhia a previa cortada e o advogado recebia
  * a intimacao pela metade — com mais caracteres.
  *
@@ -135,8 +135,8 @@ function chaveGrupo(pub) {
  * Duas regras, e a segunda existe por causa de um erro real cometido antes:
  *
  * 1. DENTRO de uma fonte, nada e fundido. A fonte ja distingue seus proprios
- *    registros. Em 11/08/2026 o processo 1000130-40.2026.5.02.0467 tem duas
- *    notificacoes distintas (numeroComunicacao 33004 e 33005) cujos primeiros
+ *    registros. Em 11/08/2026 o processo 1000000-00.2026.5.02.0000 tem duas
+ *    notificacoes distintas (numeroComunicacao dois numeros de comunicacao distintos) cujos primeiros
  *    160 caracteres sao identicos, porque o cabecalho da vara e padronizado.
  *    Qualquer dedupe por prefixo de texto apagaria uma delas.
  *
