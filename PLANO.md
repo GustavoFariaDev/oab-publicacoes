@@ -180,7 +180,9 @@ Tarefa diária às **14:00** no Agendador de Tarefas do Windows, com "executar a
 3. **nenhuma fonte ligada caiu ou veio pela metade** — portal fora do ar às 14h só tem antídoto se as 16h tentarem de novo;
 4. a contagem bate.
 
-Qualquer "não" aí deixa o dia em aberto para o retry. Se as 14h resolveram tudo, o retry não faz nada e você não recebe mensagem duplicada.
+Qualquer "não" aí deixa o dia em aberto para o retry.
+
+**Mas o retry sempre coleta de novo, mesmo com o dia resolvido.** Até 12/08/2026 ele saía antes de consultar a API quando o dia estava completo. Parecia economia, e era um buraco: `completo` mede "nenhuma fonte falhou", não "nada mais pode chegar" — e publicação entra no diário ao longo do dia. Uma que aparecesse depois das 14h não seria vista às 16h nem às 17h, que é exatamente o caso para o qual o retry existe. Agora ele consulta sempre; quem decide se envia é o dedupe. Sem novidade e sem canal pendente, termina em silêncio e você não recebe duplicata.
 
 Um detalhe do item 2: o canal que ficou para trás recebe o **dia inteiro**, não só o que faltava — e por isso o canal que já estava em dia pode receber repetido quando os dois envios se cruzam. É a troca certa: duplicata é chateação, publicação faltando é prazo.
 

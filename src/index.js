@@ -69,9 +69,20 @@ async function main() {
   const dry = isDryRun();
   let stage = 'inicio';
 
+  // ATENCAO ao mexer aqui: o --retry NAO pode desistir antes de coletar.
+  //
+  // Ate 12/08/2026 ele saia direto quando isDayComplete(dia) era true. Parecia
+  // economia — o dia ja saiu, para que consultar de novo? — mas confundia duas
+  // coisas: "nenhuma fonte falhou" (que e o que "completo" mede) com "nada mais
+  // pode chegar", que no dia corrente nunca e verdade. Publicacao entra no DJEN
+  // ao longo do dia; uma que aparecesse depois das 14h nao seria vista as 16h
+  // nem as 17h, e o retry existe exatamente para isso.
+  //
+  // Coletar de novo custa uma consulta. Quem decide se manda alguma coisa e o
+  // dedupe la embaixo: se nao ha publicacao nova nem canal pendente, o run
+  // termina sem enviar nada. O estado so serve para dizer o que ja foi.
   if (process.argv.includes('--retry') && isDayComplete(dataISO)) {
-    log.info(`Retry: ${dataBR} ja saiu por todos os canais, com as fontes de pe. Nada a fazer.`);
-    return;
+    log.info(`Retry: ${dataBR} ja saiu por todos os canais — conferindo se entrou algo novo.`);
   }
 
   log.info(`=== OAB publicacoes — ${dataBR}${dry ? ' (DRY RUN)' : ''} ===`);

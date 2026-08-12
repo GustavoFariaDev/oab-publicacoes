@@ -30,7 +30,9 @@ flowchart TD
     R -->|sim| F["Fim"]
 ```
 
-Um dia só é considerado **resolvido** quando as quatro coisas valem: saiu, saiu por **todos** os canais ligados, nenhuma fonte caiu ou veio pela metade, e a contagem bateu. Qualquer "não" deixa o dia em aberto e os retries das 16h/17h voltam nele — completando só o canal que faltou, sem reenviar o que já chegou.
+Um dia só é considerado **resolvido** quando as quatro coisas valem: saiu, saiu por **todos** os canais ligados, nenhuma fonte caiu ou veio pela metade, e a contagem bateu.
+
+Mesmo assim, **os retries sempre coletam de novo**. Publicação entra no diário ao longo do dia, e "o dia já saiu" não significa "nada mais pode chegar" — quem decide se há o que enviar é o dedupe, não o estado. Se não houver publicação nova nem canal pendente, o retry termina em silêncio; se houver, sai só o que falta, como complemento.
 
 ## As duas fontes
 

@@ -10,7 +10,18 @@ Ordem de prioridade: **1 → 2 → 3**. Os itens 4 e 5 são conferências, não 
 
 **Estado:** `PORTAL=0`. Em `src/sources/portal.js` há **7 seletores** ainda com o valor literal `TODO(fase-1)` e a função `irParaPublicacoesPorData()` só lança erro.
 
-**O que custa:** o portal agrega os **diários de MG e da União**, que não existem na API do CNJ. Medido em 01/07–11/08/2026: portal ~179 publicações contra 152 da API — cerca de **15% a menos** hoje. Uma publicação de MG ou da União simplesmente não chega.
+**O que custa:** o portal agrega os **diários de MG e da União**, que não existem na API do CNJ. Medido em 01/07–11/08/2026: portal ~179 publicações contra 152 da API — cerca de **15% a menos** hoje.
+
+Pior: as duas fontes divergem **nos dois sentidos**, então nenhuma contém a outra. Conferido contra o resumo do portal em 12/08/2026:
+
+| Data | Portal (card) | API do CNJ | |
+|---|---|---|---|
+| 12/08/2026 | DJ SP (7) | 5 | **faltaram 2 do próprio DJ SP** |
+| 11/08/2026 | DJ SP (10) | 10 | bate |
+| 07/08/2026 | DJ SP (5) + DJ MG (2) | 5 | faltaram as 2 de MG |
+| 06/08/2026 | DJ SP (11) | 14 | a API trouxe **3 a mais** (TRT e TRF3, que o card "DJ SP" não conta) |
+
+E há um agravante: **com `PORTAL=0` o robô não enxerga essa falta**. O card do portal é a única contagem independente da nossa extração — é dele que sai o aviso de divergência. Sem ele, 5 publicações num dia de 7 parecem um dia de 5.
 
 **O que fazer** (precisa de uma sessão com o Chrome aberto e autenticado — o Cloudflare Turnstile exige clique humano):
 
