@@ -14,38 +14,39 @@ Mapeado contra a tela real e ligado (`PORTAL=1`). No dia 12/08 o robô passou de
 
 ---
 
-## 1. O WhatsApp parou de entregar — e mentia que tinha entregado
+## 1. O WhatsApp entrega, mas não confirma que entregou
 
-**Descoberto em 12/08/2026.** `client.sendMessage()` passou a devolver `undefined`: a promise resolve, o log diz "resumo enviado", o estado marca o dia como entregue — **e nada chega**. É o pior tipo de falha, porque o canal some junto com o aviso de que sumiu.
-
-O mecanismo está no código da própria biblioteca:
+**Apurado em 12/08/2026.** `client.sendMessage()` devolve `undefined` em vez de um `Message` com id:
 
 ```js
 return sentMsg ? new Message(this, sentMsg) : undefined;   // Client.js
 ```
 
-O envio dentro da página do WhatsApp Web não produz mensagem e a biblioteca engole isso. `getChats()` e `getChatById()` estouram com erro minificado na mesma sessão — sintomas de injeção quebrada contra o WhatsApp Web atual.
+Na mesma sessão, `getChats()` e `getChatById()` estouram com erro minificado. É a construção dos modelos de retorno que está quebrada contra o WhatsApp Web atual.
 
-**O que já foi feito:** `enviarConferindo()` em `src/whatsapp.js` agora exige a confirmação de envio e lança erro quando ela não vem. A falha ficou barulhenta: o canal falha, o estado NÃO grava entrega e o dia continua em aberto. O registro falso do dia 12/08 foi apagado do `state.json`.
+**O envio em si funciona.** Mensagens de teste com retorno vazio chegaram no aparelho de destino (conferido às 14:55 e 14:59), e as 7 publicações do dia saíram às 15:06. Vale registrar o caminho errado percorrido: o retorno vazio foi lido como "não enviou", e por meia hora o diagnóstico foi de canal morto. Retorno vazio não é prova de não-entrega — é ausência de prova.
+
+**O que ficou:** `enviarConferindo()` em `src/whatsapp.js` registra um aviso no log quando a confirmação não vem, e **não** lança erro. Tratar "sem confirmação" como "não enviou" derrubaria o único canal que existe, e o custo desse engano é o dia inteiro sem publicação.
+
+**O que continua faltando:** não há como confirmar entrega de verdade. Se um dia a mensagem parar de sair, o aviso no log é o primeiro lugar para olhar — mas ele já aparece hoje, com entrega funcionando, então não serve de alarme.
 
 **O que NÃO resolve:**
 
 - `whatsapp-web.js@1.34.7` é a última publicada (abril/2026) — já estava instalada
-- o `main` do GitHub (commits até julho/2026, incluindo correções de injeção) tem **exatamente o mesmo comportamento** — testado
+- o `main` do GitHub (commits até julho/2026) tem **o mesmo comportamento** — testado
 
-**Caminhos, do mais barato ao mais caro:**
-
-1. **Re-parear a sessão** (`npm run setup:whatsapp`, novo QR). Barato e vale tentar antes de tudo, mas o sintoma não parece de sessão: a conta autentica, fica `ready` e `getNumberId` funciona.
-2. **Ligar o e-mail** (item 2). É o único canal que não depende de biblioteca não-oficial. Deixou de ser "bom ter" e virou a única entrega possível.
-3. **Trocar de biblioteca** para [Baileys](https://github.com/WhiskeySockets/Baileys) — fala o protocolo direto, sem navegador, e é mantida com mais frequência. Significa reescrever `src/whatsapp.js` e parear de novo.
+**Caminho de verdade:** trocar para [Baileys](https://github.com/WhiskeySockets/Baileys), que fala o protocolo direto, sem navegador, e devolve confirmação (`ack`) de verdade. Significa reescrever `src/whatsapp.js` e parear de novo. Enquanto isso não acontece, a entrega funciona sem rede de segurança.
 
 ---
 
-## 2. E-mail desligado — agora é o único caminho
+## 2. E-mail desligado
 
 **Estado:** `CANAIS=whatsapp`. `SMTP_PASS` está vazio.
 
-**O que custa:** com o WhatsApp entregando nada (item 1), **hoje não existe canal de entrega nenhum**. E o aviso de falha sairia pelo mesmo WhatsApp quebrado — um dia sem mensagem é indistinguível de um dia sem publicação.
+**O que custa:** duas coisas, e a segunda é pior.
+
+- Se a sessão do WhatsApp cair, **nada chega**.
+- O aviso de falha sai pelo mesmo WhatsApp. Se o WhatsApp é a falha, **você não é avisado de nada** — e um dia sem mensagem fica indistinguível de um dia sem publicação. Foi exatamente essa ambiguidade que custou meia hora de diagnóstico em 12/08.
 
 **O que fazer:** gerar uma **Senha de app** do Google (não é a senha da conta):
 

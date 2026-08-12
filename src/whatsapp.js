@@ -75,25 +75,30 @@ function aguardarReady(client, timeoutMs = 90000) {
 }
 
 /**
- * Envia e CONFERE que saiu.
+ * Envia e registra se deu para confirmar.
  *
- * whatsapp-web.js devolve um Message quando envia. Em 12/08/2026 ele passou a
- * devolver `undefined`: a promise resolve, nada e entregue, e quem chamou acha
- * que deu certo. A biblioteca (1.34.7, publicada em abril/2026) tem a injecao
- * quebrada contra o WhatsApp Web de agosto — os mesmos sintomas aparecem em
- * getChats() e getChatById(), que estouram com erro minificado.
+ * whatsapp-web.js deveria devolver um Message com id. Contra o WhatsApp Web de
+ * 12/08/2026 ele devolve `undefined` — a construcao do modelo de retorno esta
+ * quebrada (na mesma sessao, getChats() e getChatById() estouram com erro
+ * minificado). O envio EM SI funciona: mensagens de teste com esse retorno
+ * vazio chegaram normalmente no aparelho de destino, conferido as 14:55 e
+ * 14:59 daquele dia.
  *
- * O dia inteiro dependia dessa promise: o estado marcava "entregue" e o retry
- * das 16h nao voltava. Falha silenciosa em canal de aviso e pior do que canal
- * nenhum, porque some com o proprio aviso de que falhou.
+ * Por isso aqui NAO se lanca erro quando a confirmacao falta. Tratar "sem
+ * confirmacao" como "nao enviou" derrubaria o unico canal que existe, e o
+ * custo desse engano e o dia inteiro sem publicacao — bem maior do que o de
+ * uma mensagem repetida.
+ *
+ * O aviso no log fica: se um dia a mensagem realmente parar de sair, e o
+ * primeiro lugar onde olhar. Confirmacao de verdade so vem com uma biblioteca
+ * que funcione (ver docs/PENDENCIAS.md).
  */
 async function enviarConferindo(client, chatId, conteudo, oQue) {
   const enviada = await client.sendMessage(chatId, conteudo);
   if (!enviada?.id?._serialized) {
-    throw new Error(
-      `WhatsApp aceitou ${oQue} mas nao devolveu confirmacao de envio — ` +
-        'a mensagem NAO saiu. Provavel incompatibilidade do whatsapp-web.js ' +
-        'com a versao atual do WhatsApp Web.',
+    log.warn(
+      `WhatsApp: ${oQue} saiu sem confirmacao da biblioteca ` +
+        '(retorno vazio — limitacao conhecida do whatsapp-web.js).',
     );
   }
   return enviada;
