@@ -91,7 +91,14 @@ function pascoa(ano) {
 
 const cacheFeriados = new Map();
 
-/** Feriados de um ano: fixos + moveis + os extras do .env daquele ano. */
+/**
+ * Feriados nacionais de um ano: os fixos e os moveis derivados da Pascoa.
+ *
+ * So o que e regra, nunca o que vem do .env — por isso da para guardar em
+ * cache sem medo. Feriado de configuracao entra por chavesLocais(), que le o
+ * ambiente na hora: guardar aquilo aqui faria a primeira chamada congelar o
+ * valor e o resto do processo enxergar uma lista velha.
+ */
 export function feriados(ano) {
   if (cacheFeriados.has(ano)) return cacheFeriados.get(ano);
 
@@ -100,10 +107,6 @@ export function feriados(ano) {
   // Carnaval e Corpus Christi nao sao feriado nacional por lei, mas sao feriado
   // forense em todo tribunal — ignora-los inventaria dias uteis que nao existem.
   for (const n of [-48, -47, -2, 60]) set.add(chave(somarDias(p, n)));
-  for (const extra of config.feriadosExtra) {
-    const d = deBR(extra);
-    if (d && d.getUTCFullYear() === ano) set.add(chave(d));
-  }
 
   cacheFeriados.set(ano, set);
   return set;
@@ -116,22 +119,47 @@ export function emRecesso(d) {
   return (mes === 12 && dia >= 20) || (mes === 1 && dia <= 20);
 }
 
-/** Dia util para fim de prazo: nao e fim de semana, feriado nem recesso. */
-export function ehDiaUtil(d) {
-  const semana = d.getUTCDay();
-  if (semana === 0 || semana === 6) return false;
-  if (feriados(d.getUTCFullYear()).has(chave(d))) return false;
-  return !emRecesso(d);
+/**
+ * Codigo da comarca de origem: os 4 ultimos digitos do numero CNJ.
+ * "1039487-77.2024.8.26.0564" -> "0564" (Sao Bernardo do Campo).
+ */
+export function comarcaDoProcesso(numeroProcesso = '') {
+  const digitos = String(numeroProcesso).replace(/\D/g, '');
+  return digitos.length >= 4 ? digitos.slice(-4) : '';
 }
 
-/** As datas de FERIADOS_EXTRA, como Set de "aaaa-mm-dd" (so as validas). */
-function chavesLocais() {
+/** Datas de uma lista dd/mm/aaaa como Set de "aaaa-mm-dd" (so as validas). */
+function comoChaves(datas = []) {
   const set = new Set();
-  for (const bruto of config.feriadosExtra) {
+  for (const bruto of datas) {
     const d = deBR(bruto);
     if (d) set.add(chave(d));
   }
   return set;
+}
+
+/** Feriados locais que valem para uma comarca: os globais + os dela. */
+function chavesLocais(comarca = '') {
+  const set = comoChaves(config.feriadosExtra);
+  for (const data of config.feriadosPorComarca.get(comarca) ?? []) {
+    const d = deBR(data);
+    if (d) set.add(chave(d));
+  }
+  return set;
+}
+
+/**
+ * Dia util para fim de prazo: nao e fim de semana, feriado nem recesso.
+ *
+ * `comarca` muda o resultado so quando ha feriado municipal configurado para
+ * ela — o aniversario da cidade nao suspende expediente na comarca vizinha.
+ */
+export function ehDiaUtil(d, comarca = '') {
+  const semana = d.getUTCDay();
+  if (semana === 0 || semana === 6) return false;
+  if (feriados(d.getUTCFullYear()).has(chave(d))) return false;
+  if (chavesLocais(comarca).has(chave(d))) return false;
+  return !emRecesso(d);
 }
 
 /**
@@ -143,8 +171,8 @@ function chavesLocais() {
  * errado seria bug meu; um feriado local errado e uma linha do .env que
  * ninguem lembra de conferir. Entao ele aparece.
  */
-export function feriadosLocaisNoIntervalo(inicio, fim) {
-  const locais = chavesLocais();
+export function feriadosLocaisNoIntervalo(inicio, fim, comarca = '') {
+  const locais = chavesLocais(comarca);
   if (!locais.size) return [];
 
   const achados = [];
@@ -155,23 +183,23 @@ export function feriadosLocaisNoIntervalo(inicio, fim) {
 }
 
 /** Primeiro dia util a partir de (e incluindo) a data dada. */
-export function diaUtilSeguinte(d, { incluirHoje = false } = {}) {
+export function diaUtilSeguinte(d, { incluirHoje = false, comarca = '' } = {}) {
   let atual = incluirHoje ? d : somarDias(d, 1);
   // Teto: o recesso ja come 32 dias corridos; 60 cobre recesso + feriados na
   // borda sem risco de laco infinito se FERIADOS_EXTRA vier com bobagem.
   for (let i = 0; i < 60; i++) {
-    if (ehDiaUtil(atual)) return atual;
+    if (ehDiaUtil(atual, comarca)) return atual;
     atual = somarDias(atual, 1);
   }
   return atual;
 }
 
 /** Soma N dias uteis a partir do inicio (que ja deve ser dia util). */
-function somarDiasUteis(inicio, dias) {
+function somarDiasUteis(inicio, dias, comarca = '') {
   let atual = inicio;
   let contados = 1; // o proprio dia de inicio e o 1o dia do prazo
   while (contados < dias) {
-    atual = diaUtilSeguinte(atual);
+    atual = diaUtilSeguinte(atual, { comarca });
     contados++;
   }
   return atual;
@@ -268,9 +296,11 @@ export function calcularPrazo(pub) {
   // Se a fonte informou a data de publicacao, ela manda: e o dado oficial, e a
   // nossa conta e so o substituto para quando ele nao vem (a API do CNJ nao
   // devolve esse campo).
+  // O feriado municipal so vale na comarca do processo (ver config.feriadosPorComarca).
+  const comarca = comarcaDoProcesso(pub.numeroProcesso);
   const informada = deBR(pub.dataPublicacao);
-  const publicacao = informada ?? diaUtilSeguinte(disp);
-  const inicio = diaUtilSeguinte(publicacao);
+  const publicacao = informada ?? diaUtilSeguinte(disp, { comarca });
+  const inicio = diaUtilSeguinte(publicacao, { comarca });
 
   const declarados = prazosDeclarados(pub.intimacao);
   // Distintos: o mesmo prazo repetido no texto ("no prazo de 15 dias" citado
@@ -291,8 +321,8 @@ export function calcularPrazo(pub) {
       unico.tipo === 'corridos'
         ? // Prazo em dias corridos que termine em dia nao util corre para o
           // proximo util (art. 224, §1o).
-          diaUtilSeguinte(somarDias(inicio, unico.quantidade - 1), { incluirHoje: true })
-        : somarDiasUteis(inicio, unico.quantidade);
+          diaUtilSeguinte(somarDias(inicio, unico.quantidade - 1), { incluirHoje: true, comarca })
+        : somarDiasUteis(inicio, unico.quantidade, comarca);
   }
 
   return {
@@ -306,7 +336,7 @@ export function calcularPrazo(pub) {
     citados: distintos.map(({ quantidade, unidade }) => ({ quantidade, unidade })),
     // Do inicio da contagem ate o vencimento: e o trecho em que um feriado
     // local muda a data. Fora dele, ele nao influenciou nada.
-    feriadosLocais: fatal ? feriadosLocaisNoIntervalo(inicio, fatal) : [],
+    feriadosLocais: fatal ? feriadosLocaisNoIntervalo(inicio, fatal, comarca) : [],
   };
 }
 

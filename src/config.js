@@ -90,6 +90,35 @@ export const config = {
       .filter(Boolean);
   },
 
+  /**
+   * Feriados que valem em UMA comarca so — aniversario da cidade, padroeira.
+   *
+   * Formato: "0564:20/08/2026,15/09/2026;0554:08/04/2026", onde 0564 e o codigo
+   * de origem do processo (os 4 ultimos digitos do numero CNJ).
+   *
+   * Separado do FERIADOS_EXTRA por necessidade, nao por organizacao: o
+   * aniversario de Sao Bernardo nao e feriado em Campinas, e aplicar a data em
+   * todo mundo empurraria o vencimento dos processos das outras comarcas para
+   * frente — exatamente a direcao que faz perder prazo.
+   *
+   * @returns {Map<string, string[]>} codigo da comarca -> datas dd/mm/aaaa
+   */
+  get feriadosPorComarca() {
+    const mapa = new Map();
+    for (const bloco of (process.env.FERIADOS_COMARCA || '').split(';')) {
+      const [codigo, datas] = bloco.split(':');
+      if (!codigo?.trim() || !datas) continue;
+      mapa.set(
+        codigo.trim(),
+        datas
+          .split(',')
+          .map((s) => s.trim())
+          .filter(Boolean),
+      );
+    }
+    return mapa;
+  },
+
   timezone: process.env.TZ_APP || 'America/Sao_Paulo',
   // Nao existe modo headless: o portal so e acessado pela janela de Chrome que
   // o usuario abre e autentica (ver src/browser.js).

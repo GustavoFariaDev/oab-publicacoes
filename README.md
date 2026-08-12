@@ -61,11 +61,11 @@ Cada publicação sai com as datas já calculadas:
 | Contagem começa | primeiro dia útil após a publicação |
 | Vencimento | em dias úteis, pulando feriado e recesso |
 
-Feriados: nacionais fixos, móveis derivados da Páscoa pelo algoritmo de Meeus (carnaval, Sexta-feira Santa, Corpus Christi) e o **recesso de 20/12 a 20/01** (art. 220). Feriado estadual, municipal ou forense entra à mão em `FERIADOS_EXTRA` — não há fonte offline confiável para eles. **O erro aqui é assimétrico**: feriado que falta adianta o vencimento (seguro), feriado inventado o empurra para frente (perde prazo). Por isso só entra data conferida no calendário do TJSP, e todo vencimento que usar uma delas sai dizendo que usou.
+Feriados: nacionais fixos, móveis derivados da Páscoa pelo algoritmo de Meeus (carnaval, Sexta-feira Santa, Corpus Christi) e o **recesso de 20/12 a 20/01** (art. 220). Feriado estadual, municipal ou forense entra à mão em `FERIADOS_EXTRA` — não há fonte offline confiável para eles. **O erro aqui é assimétrico**: feriado que falta adianta o vencimento (seguro), feriado inventado o empurra para frente (perde prazo). Por isso só entra data conferida no calendário do TJSP, e todo vencimento que usar uma delas sai dizendo que usou. Feriado municipal vai em `FERIADOS_COMARCA`, amarrado ao código de origem do processo: o aniversário de São Bernardo não é feriado em Campinas.
 
 **O vencimento só é calculado quando o texto declara um único prazo.** Com mais de um, o robô lista os prazos e não arrisca data. Isso veio de um caso real: um despacho citava quatro prazos — cinco e trinta dias do *perito*, dez para os *esclarecimentos dele*, e quinze das partes que só corriam **depois da entrega do laudo**. Nenhum era do advogado naquele dia. Uma versão anterior escolhia o menor e teria estampado um vencimento que não existia. Data falsa não é cautela: gasta a confiança no aviso, e no dia em que o vencimento for verdadeiro ele vai parecer mais um palpite.
 
-`npm run teste` roda as 141 verificações do projeto.
+`npm run teste` roda as 164 verificações do projeto.
 
 ## Instalação
 

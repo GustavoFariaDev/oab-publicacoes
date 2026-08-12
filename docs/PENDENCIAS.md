@@ -31,9 +31,38 @@ Estado em **12/08/2026, 15h30**. Cada item diz o que é, o que custa deixar como
 
 ---
 
-## 3. Feriados locais fora da conta de prazo
+## ~~3. Feriados locais fora da conta de prazo~~ — PREENCHIDO em 12/08/2026
 
-**Estado:** `FERIADOS_EXTRA` vazio — **de propósito**.
+Calendário do TJSP conferido na fonte, comarca de **São Bernardo do Campo**. Das 19 datas do Provimento CSM 2.813/2025, o código já cobria 10 (nacionais fixos + móveis da Páscoa); as outras 9 entraram no `.env`.
+
+**Uma delas não podia entrar junto com as outras.** `20/08/2026 — ANIVERSÁRIO DA CIDADE` é a única da lista sem referência ao Provimento: vale só em São Bernardo. Como o `FERIADOS_EXTRA` é global, colá-la ali trataria 20/08 como feriado também nos processos de Campinas, Sumaré e da capital — empurrando o vencimento deles para frente, a direção que perde prazo.
+
+Por isso existe agora `FERIADOS_COMARCA`, que amarra a data ao código de origem do processo (os 4 últimos dígitos do número CNJ):
+
+```env
+FERIADOS_EXTRA=02/04/2026,20/04/2026,05/06/2026,09/07/2026,10/07/2026,28/10/2026,07/12/2026,08/12/2026
+FERIADOS_COMARCA=0564:20/08/2026
+```
+
+Medido: 15 dias úteis a partir de 14/08 vencem **04/09 em São Bernardo** e **03/09 em Campinas**. Mesma publicação, mesma regra, datas diferentes — como tem que ser.
+
+**Em janeiro de 2027:** repetir o processo (novo Provimento, novas pontes) e acrescentar a comarca de Santo André (`0554`), que ainda não foi conferida.
+
+---
+
+## 3b. As demais comarcas ainda não foram conferidas
+
+**Estado:** só São Bernardo (`0564`) tem calendário conferido. Os processos de Santo André (`0554`), Campinas (`0114`), Sumaré (`0604`) e da capital (`0100`, `0002`) contam apenas com os feriados estaduais.
+
+**O que custa:** um feriado municipal dessas comarcas não é considerado → o vencimento sai **um dia adiantado**. É a direção segura, e a ressalva já está em toda saída — mas é ruído evitável.
+
+**O que fazer:** mesma receita do item acima, uma comarca por vez, acrescentando ao `FERIADOS_COMARCA` separado por `;`.
+
+---
+
+## 3c. Sobre o `FERIADOS_EXTRA` em geral
+
+**Estado:** preenchido com dado conferido.
 
 **O que a conta já sabe:** feriados nacionais fixos, os móveis derivados da Páscoa (carnaval, Sexta-feira Santa, Corpus Christi) e o recesso de 20/12 a 20/01.
 
