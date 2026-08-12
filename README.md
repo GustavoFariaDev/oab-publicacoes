@@ -109,7 +109,7 @@ Flags: `--dry`, `--data=dd/mm/aaaa`, `--retry` (no-op se o dia já está resolvi
 - [x] Estado por dia + retries condicionais
 - [x] Contagem de prazo
 - [x] **Portal da OAB** — mapeado e funcionando (`PORTAL=1`), com paginação e guard-rail de contagem
-- [ ] **E-mail** — depende de uma Senha de app do Google; enquanto não existir, `CANAIS=whatsapp` mantém a automação de pé
+- [x] **E-mail** — ligado e verificado (`CANAIS=whatsapp,email`)
 
 Detalhes e prioridade em **[docs/PENDENCIAS.md](docs/PENDENCIAS.md)**.
 
