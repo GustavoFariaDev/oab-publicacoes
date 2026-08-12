@@ -1,0 +1,26 @@
+{
+  "name": "oab-publicacoes",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Consulta diaria das publicacoes do DJ no portal da OAB SP e envio por e-mail e WhatsApp",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "once": "node src/index.js",
+    "dry": "node src/index.js --dry",
+    "inspecionar": "node scripts/inspecionar.js",
+    "setup:whatsapp": "node scripts/setup-whatsapp.js",
+    "register-task": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/register-task.ps1",
+    "abrir-chrome": "node scripts/abrir-chrome.js",
+    "explorar": "node scripts/explorar.js"
+  },
+  "dependencies": {
+    "nodemailer": "^6.9.16",
+    "pdfkit": "^0.15.1",
+    "playwright": "^1.49.1",
+    "qrcode-terminal": "^0.12.0",
+    "whatsapp-web.js": "^1.26.0"
+  }
+}

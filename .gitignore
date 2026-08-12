@@ -1,0 +1,20 @@
+# Credenciais — nunca versionar
+.env
+
+# Sessoes persistidas (contem cookies de login)
+chrome-profile/
+.wwebjs_auth/
+.wwebjs_cache/
+
+# Saidas e estado
+out/
+logs/
+state.json
+
+# Node
+node_modules/
+npm-debug.log*
+
+# Prints do planejamento
+*.png
+Novo(a) Documento de Texto.txt

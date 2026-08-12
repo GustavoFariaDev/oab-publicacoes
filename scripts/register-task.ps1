@@ -1,0 +1,90 @@
+# Registra a automacao no Agendador de Tarefas do Windows.
+#
+#   14:00  execucao principal
+#   16:00  retry condicional (no-op so se o dia ja saiu por TODOS os canais,
+#          com todas as fontes de pe e a contagem batendo — ver isDayComplete)
+#   17:00  retry condicional
+#
+# Rode uma vez:  npm run register-task
+
+$ErrorActionPreference = 'Stop'
+
+$ProjectDir = Split-Path -Parent $PSScriptRoot
+$LinkPath   = 'D:\oab-pubs'
+
+# O caminho real tem acento e espaco ("Programação VS\automação OAB Publicaçoes").
+# O Agendador quebra em silencio com isso, entao a tarefa aponta para um
+# junction em ASCII. O projeto continua morando onde esta.
+if (-not (Test-Path $LinkPath)) {
+    Write-Host "Criando junction $LinkPath -> $ProjectDir"
+    New-Item -ItemType Junction -Path $LinkPath -Target $ProjectDir | Out-Null
+} else {
+    Write-Host "Junction $LinkPath ja existe."
+}
+
+$NodeExe = (Get-Command node).Source
+Write-Host "Node: $NodeExe"
+
+$Settings = New-ScheduledTaskSettingsSet `
+    -StartWhenAvailable `
+    -DontStopIfGoingOnBatteries `
+    -AllowStartIfOnBatteries `
+    -ExecutionTimeLimit (New-TimeSpan -Minutes 30)
+
+# O Chrome precisa de sessao grafica para passar pela Cloudflare. LogonType
+# Interactive equivale a "Executar somente quando o usuario estiver conectado"
+# na interface do Agendador. Sem isso a tarefa roda sem desktop e falha em
+# silencio as 14h — que e o modo de quebra mais dificil de perceber.
+$Principal = New-ScheduledTaskPrincipal `
+    -UserId "$env:USERDOMAIN\$env:USERNAME" `
+    -LogonType Interactive `
+    -RunLevel Limited
+
+function Register-OabTask {
+    param(
+        [string]$Name,
+        [string]$Time,
+        [string]$Arguments,
+        [string]$Description
+    )
+
+    $Action = New-ScheduledTaskAction `
+        -Execute $NodeExe `
+        -Argument $Arguments `
+        -WorkingDirectory $LinkPath
+
+    $Trigger = New-ScheduledTaskTrigger -Daily -At $Time
+
+    if (Get-ScheduledTask -TaskName $Name -ErrorAction SilentlyContinue) {
+        Unregister-ScheduledTask -TaskName $Name -Confirm:$false
+    }
+
+    Register-ScheduledTask `
+        -TaskName $Name `
+        -Action $Action `
+        -Trigger $Trigger `
+        -Settings $Settings `
+        -Principal $Principal `
+        -Description $Description | Out-Null
+
+    Write-Host "Registrada: $Name ($Time)"
+}
+
+Register-OabTask -Name 'OAB Publicacoes - 14h' -Time '14:00' `
+    -Arguments 'src\index.js' `
+    -Description 'Consulta as publicacoes do dia na OAB SP e envia por e-mail e WhatsApp.'
+
+Register-OabTask -Name 'OAB Publicacoes - retry 16h' -Time '16:00' `
+    -Arguments 'src\index.js --retry' `
+    -Description 'Retry condicional: so roda se o dia estiver vazio ou incompleto.'
+
+Register-OabTask -Name 'OAB Publicacoes - retry 17h' -Time '17:00' `
+    -Arguments 'src\index.js --retry' `
+    -Description 'Retry condicional: so roda se o dia estiver vazio ou incompleto.'
+
+Write-Host ''
+Write-Host 'Pronto. Para conferir:'
+Write-Host '  Get-ScheduledTask -TaskName "OAB Publicacoes*"'
+Write-Host ''
+Write-Host 'Teste rodando a tarefa manualmente pelo Agendador — o ambiente dela'
+Write-Host 'e diferente do terminal, e e ali que erro de caminho aparece.'
