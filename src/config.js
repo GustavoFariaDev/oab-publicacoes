@@ -114,7 +114,10 @@ export const config = {
     chromeProfile: path.join(ROOT, 'chrome-profile'),
     out: path.join(ROOT, 'out'),
     logs: path.join(ROOT, 'logs'),
-    state: path.join(ROOT, 'state.json'),
+    // STATE_PATH existe para o teste: as regras de estado decidem se um dia e
+    // reenviado ou esquecido, e ate agora so davam para exercitar escrevendo no
+    // state.json de producao (com backup a mao). Em producao fica no padrao.
+    state: process.env.STATE_PATH || path.join(ROOT, 'state.json'),
   },
 };
 

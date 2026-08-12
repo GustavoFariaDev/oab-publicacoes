@@ -1,13 +1,12 @@
 /**
- * Reconhecimento da Fase 1, sem interacao.
+ * Reconhecimento do portal, sem interacao.
  *
- * Despeja em out/recon/ tudo que serve para fechar os seletores marcados
- * TODO(fase-1) em src/sources/portal.js: HTML das telas, screenshots e um
- * inventario de inputs/botoes/links visiveis.
+ * Despeja em out/recon/ o que serve para conferir ou refazer os seletores de
+ * src/sources/portal.js: HTML das telas, screenshots e um inventario de
+ * inputs/botoes/links visiveis. Util quando o portal mudar de layout.
  *
- * Pre-requisito: `npm run abrir-chrome`, Cloudflare clicado e login feito.
- * Este script le a janela que voce deixou aberta — nao abre navegador proprio
- * nem faz login (ver a nota em src/browser.js sobre o Turnstile).
+ * Abre a janela do Chrome se ela nao estiver de pe (ver src/chrome.js) e le a
+ * pagina ja autenticada — nao faz login nem resolve o Turnstile.
  *
  *   node scripts/explorar.js
  */

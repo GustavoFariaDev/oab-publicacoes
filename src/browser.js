@@ -1,8 +1,9 @@
 import { chromium } from 'playwright';
 import { config } from './config.js';
+import { garantirChrome } from './chrome.js';
 
 /**
- * Conecta ao Chrome que o usuario deixou aberto por `npm run abrir-chrome`.
+ * Conecta ao Chrome com porta de depuracao — abrindo-o se preciso.
  *
  * Este e o UNICO caminho de acesso ao portal em todo o projeto — scraper,
  * recon e sessao exploratoria usam esta mesma funcao de proposito. Um Chrome
@@ -12,9 +13,15 @@ import { config } from './config.js';
  * chrome-profile/ tambem confundia qual sessao ficava "salva" — por isso o
  * lancador do Playwright foi removido em vez de mantido como alternativa.
  *
+ * Abrir por conta propria (garantirChrome) nao contradiz isso: quem sobe a
+ * janela e um spawn de chrome.exe comum, o mesmo que o usuario faria a mao.
+ * O Playwright continua so LENDO a pagina.
+ *
  * @returns {Promise<{browser: import('playwright').Browser, context: import('playwright').BrowserContext, page: import('playwright').Page}>}
  */
-export async function conectarChromeAberto() {
+export async function conectarChromeAberto({ abrirSePreciso = true } = {}) {
+  if (abrirSePreciso) await garantirChrome();
+
   let browser;
   try {
     browser = await chromium.connectOverCDP(config.cdpEndpoint);

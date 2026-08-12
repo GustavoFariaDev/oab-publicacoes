@@ -3,7 +3,7 @@
  *
  * Pre-requisito: `npm run abrir-chrome`, clicar no "Confirme que e humano" e
  * fazer o login. Este script apenas se conecta aquela janela (CDP) e ajuda a
- * capturar os seletores marcados TODO(fase-1) em src/sources/portal.js.
+ * conferir ou refazer os seletores de src/sources/portal.js.
  *
  * Ele NAO abre navegador proprio, e nao faz login: o Chrome lancado pelo
  * Playwright e reprovado pelo Turnstile mesmo com um humano clicando na caixa,
@@ -27,7 +27,7 @@ console.log(`
  Navegue NA JANELA DO CHROME ate: Historico > Publicacoes por Data
 
  Comandos:
-   dump   lista inputs/botoes da tela atual (para os TODO(fase-1))
+   dump   lista inputs/botoes da tela atual (para refazer seletores)
    url    mostra a URL atual
    sair   desconecta (a janela do Chrome continua aberta)
 ────────────────────────────────────────────────────────────

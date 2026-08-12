@@ -16,8 +16,28 @@ export function load() {
   }
 }
 
+/**
+ * Dias guardados. Passado isso, o registro so ocupa espaco: o dedupe olha o
+ * dia da publicacao, e nenhum run consulta um dia de tres meses atras.
+ */
+const DIAS_GUARDADOS = 120;
+
+function podar(state) {
+  const limite = new Date(Date.now() - DIAS_GUARDADOS * 86400000).toISOString().slice(0, 10);
+  for (const dia of Object.keys(state.days)) {
+    // Comparacao de string funciona porque a chave e ISO (aaaa-mm-dd).
+    if (dia < limite) delete state.days[dia];
+  }
+  return state;
+}
+
 function save(state) {
-  fs.writeFileSync(config.paths.state, JSON.stringify(state, null, 2));
+  // Escreve em arquivo temporario e renomeia: se a maquina cair no meio da
+  // escrita, o state.json antigo continua inteiro em vez de virar JSON pela
+  // metade — que o load() trataria como "nunca rodou" e reenviaria tudo.
+  const tmp = `${config.paths.state}.tmp`;
+  fs.writeFileSync(tmp, JSON.stringify(podar(state), null, 2));
+  fs.renameSync(tmp, config.paths.state);
 }
 
 /**
