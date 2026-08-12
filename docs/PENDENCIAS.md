@@ -41,18 +41,25 @@ Por isso existe agora `FERIADOS_COMARCA`, que amarra a data ao código de origem
 
 ```env
 FERIADOS_EXTRA=02/04/2026,20/04/2026,05/06/2026,09/07/2026,10/07/2026,28/10/2026,07/12/2026,08/12/2026
-FERIADOS_COMARCA=0564:20/08/2026
+FERIADOS_COMARCA=0564:20/08/2026;0554:08/04/2026
 ```
+
+| Comarca | Código | Feriado municipal 2026 |
+|---|---|---|
+| São Bernardo do Campo | `0564` | 20/08 — Aniversário da Cidade |
+| Santo André | `0554` | 08/04 — Fundação da Cidade (quarta) |
+
+As duas listas estaduais batem exatamente; a diferença entre os calendários é só a data municipal. Conferido: as 19 datas de cada comarca são dia não útil nela, e o feriado de uma não vale na outra.
 
 Medido: 15 dias úteis a partir de 14/08 vencem **04/09 em São Bernardo** e **03/09 em Campinas**. Mesma publicação, mesma regra, datas diferentes — como tem que ser.
 
-**Em janeiro de 2027:** repetir o processo (novo Provimento, novas pontes) e acrescentar a comarca de Santo André (`0554`), que ainda não foi conferida.
+**Em janeiro de 2027:** repetir o processo. Novo Provimento, novas pontes, e o calendário municipal muda de ano.
 
 ---
 
 ## 3b. As demais comarcas ainda não foram conferidas
 
-**Estado:** só São Bernardo (`0564`) tem calendário conferido. Os processos de Santo André (`0554`), Campinas (`0114`), Sumaré (`0604`) e da capital (`0100`, `0002`) contam apenas com os feriados estaduais.
+**Estado:** São Bernardo (`0564`) e Santo André (`0554`) conferidos. Os processos de Campinas (`0114`), Sumaré (`0604`) e da capital (`0100`, `0002`) contam apenas com os feriados estaduais.
 
 **O que custa:** um feriado municipal dessas comarcas não é considerado → o vencimento sai **um dia adiantado**. É a direção segura, e a ressalva já está em toda saída — mas é ruído evitável.
 

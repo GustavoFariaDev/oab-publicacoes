@@ -9,7 +9,7 @@
 process.env.FERIADOS_EXTRA = '17/08/2026';
 // 0564 = Sao Bernardo do Campo. 21/08 nao e feriado em lugar nenhum de
 // verdade: aqui ele existe so para provar o isolamento entre comarcas.
-process.env.FERIADOS_COMARCA = '0564:21/08/2026';
+process.env.FERIADOS_COMARCA = '0564:21/08/2026;0554:24/08/2026';
 
 const { calcularPrazo, ehDiaUtil, deBR, resumirPrazo, feriadosLocaisNoIntervalo, comarcaDoProcesso } =
   await import('../src/prazo.js');
@@ -94,6 +94,13 @@ eq('comarca com feriado proprio vence depois', emSBC.fatal, '24/08/2026');
 eq('comarca sem ele vence antes', emCampinas.fatal, '21/08/2026');
 eq('e a saida de SBC cita as duas datas', emSBC.feriadosLocais, ['17/08/2026', '21/08/2026']);
 eq('a de Campinas cita so a global', emCampinas.feriadosLocais, ['17/08/2026']);
+
+// --- Duas comarcas configuradas nao se contaminam ---
+// Cada uma tem o SEU feriado municipal, e o da vizinha nao vale.
+eq('feriado de 0564 nao vale em 0554', ehDiaUtil(deBR('21/08/2026'), '0554'), true);
+eq('feriado de 0554 nao vale em 0564', ehDiaUtil(deBR('24/08/2026'), '0564'), true);
+eq('cada uma respeita o seu', [ehDiaUtil(deBR('21/08/2026'), '0564'), ehDiaUtil(deBR('24/08/2026'), '0554')], [false, false]);
+eq('comarca nao configurada nao herda nada', [ehDiaUtil(deBR('21/08/2026'), '0114'), ehDiaUtil(deBR('24/08/2026'), '0114')], [true, true]);
 
 console.log(`\n${ok} ok, ${mal} falha(s)`);
 process.exitCode = mal ? 1 : 0;

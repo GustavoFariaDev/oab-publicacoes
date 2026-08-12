@@ -65,7 +65,7 @@ Feriados: nacionais fixos, móveis derivados da Páscoa pelo algoritmo de Meeus 
 
 **O vencimento só é calculado quando o texto declara um único prazo.** Com mais de um, o robô lista os prazos e não arrisca data. Isso veio de um caso real: um despacho citava quatro prazos — cinco e trinta dias do *perito*, dez para os *esclarecimentos dele*, e quinze das partes que só corriam **depois da entrega do laudo**. Nenhum era do advogado naquele dia. Uma versão anterior escolhia o menor e teria estampado um vencimento que não existia. Data falsa não é cautela: gasta a confiança no aviso, e no dia em que o vencimento for verdadeiro ele vai parecer mais um palpite.
 
-`npm run teste` roda as 164 verificações do projeto.
+`npm run teste` roda as 168 verificações do projeto.
 
 ## Instalação
 
