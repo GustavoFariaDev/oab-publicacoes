@@ -1,7 +1,127 @@
 # Automação OAB — publicações do dia
 
-Consulta diária das publicações do Diário da Justiça (portal da OAB SP + API do CNJ) e envio por e-mail e/ou WhatsApp.
+[![Node](https://img.shields.io/badge/node-%E2%89%A522-brightgreen)](https://nodejs.org)
+[![Licença](https://img.shields.io/badge/licen%C3%A7a-MIT-blue)](LICENSE)
 
-Credenciais e destinos ficam só no `.env` local. Copie `.env.example` → `.env` e preencha.
+Todo dia às 14h, consulta as publicações do Diário da Justiça pela inscrição da OAB e manda o resultado por WhatsApp e e-mail, com PDF do inteiro teor anexo — e as datas de prazo já contadas.
 
-Documentação completa: [PLANO.md](PLANO.md).
+O objetivo não é "automatizar uma consulta". É que **uma publicação não passada é prazo perdido**, e conferir o diário à mão todo dia é justamente o tipo de tarefa que falha no dia em que você está ocupado. Por isso cada decisão de projeto aqui assume que o erro é assimétrico: uma publicação repetida é chateação, uma publicação faltando é dano.
+
+---
+
+## Como funciona
+
+```mermaid
+flowchart TD
+    T["14h — Agendador do Windows"] --> C{Coleta}
+    C --> CNJ["API do CNJ (DJEN)<br/>pública, sem login"]
+    C --> P["Portal da OAB SP<br/>Chrome já autenticado"]
+    CNJ --> U["União + dedupe<br/>conservador entre fontes"]
+    P --> U
+    U --> PZ["Contagem de prazo<br/>art. 224 §2º e 220 do CPC"]
+    PZ --> PDF["PDF do dia"]
+    PDF --> W["WhatsApp"]
+    PDF --> E["E-mail"]
+    W --> S["state.json"]
+    E --> S
+    S --> R{"Dia resolvido?"}
+    R -->|não| RT["Retry 16h e 17h"]
+    RT --> C
+    R -->|sim| F["Fim"]
+```
+
+Um dia só é considerado **resolvido** quando as quatro coisas valem: saiu, saiu por **todos** os canais ligados, nenhuma fonte caiu ou veio pela metade, e a contagem bateu. Qualquer "não" deixa o dia em aberto e os retries das 16h/17h voltam nele — completando só o canal que faltou, sem reenviar o que já chegou.
+
+## As duas fontes
+
+| | API do CNJ (DJEN) | Portal da OAB SP |
+|---|---|---|
+| Acesso | pública, sem autenticação | login + Cloudflare Turnstile |
+| Cobertura | DJEN | DJEN **+ diários de MG e da União** |
+| Medido em 01/07–11/08/2026 | 152 publicações | ~179 (~15% mais) |
+| Confiabilidade | alta | depende de sessão viva no Chrome |
+
+Elas são unidas, não escolhidas. **Cada uma falha isolada**: se uma cai, a outra ainda entrega e a queda vira aviso em destaque — nunca um número menor sem explicação. Se as duas caem, aí é erro, porque um "0 publicações" silencioso é indistinguível de um dia realmente vazio.
+
+O dedupe entre fontes exige similaridade alta (Jaccard ≥ 0,9) do texto inteiro, e **dentro** de uma mesma fonte nada é fundido: o mesmo processo pode ter duas intimações distintas no mesmo dia cujos primeiros 160 caracteres são idênticos, porque o cabeçalho da vara é padronizado.
+
+## Contagem de prazo
+
+Cada publicação sai com as datas já calculadas:
+
+| Etapa | Regra |
+|---|---|
+| Disponibilização | dia em que o ato apareceu no DJe (vem da fonte) |
+| Publicação | primeiro dia útil seguinte — **art. 224, §2º** |
+| Contagem começa | primeiro dia útil após a publicação |
+| Vencimento | em dias úteis, pulando feriado e recesso |
+
+Feriados: nacionais fixos, móveis derivados da Páscoa pelo algoritmo de Meeus (carnaval, Sexta-feira Santa, Corpus Christi) e o **recesso de 20/12 a 20/01** (art. 220). Feriado estadual, municipal ou forense entra à mão em `FERIADOS_EXTRA` — não há fonte offline confiável para eles.
+
+**O vencimento só é calculado quando o texto declara um único prazo.** Com mais de um, o robô lista os prazos e não arrisca data. Isso veio de um caso real: um despacho citava quatro prazos — cinco e trinta dias do *perito*, dez para os *esclarecimentos dele*, e quinze das partes que só corriam **depois da entrega do laudo**. Nenhum era do advogado naquele dia. Uma versão anterior escolhia o menor e teria estampado um vencimento que não existia. Data falsa não é cautela: gasta a confiança no aviso, e no dia em que o vencimento for verdadeiro ele vai parecer mais um palpite.
+
+`npm run teste` roda as 76 verificações dessa lógica.
+
+## Instalação
+
+Requer **Node 22+** e Windows (o agendamento usa o Agendador de Tarefas).
+
+```bash
+npm install
+cp .env.example .env      # preencha: OAB, canais, destinos
+npm run setup:whatsapp    # QR Code, uma vez — sessão fica em .wwebjs_auth/
+npm run register-task     # tarefas das 14h, 16h e 17h
+```
+
+Para ligar o portal como segunda fonte (`PORTAL=1` no `.env`):
+
+```bash
+npm run abrir-chrome      # abra, clique no Cloudflare, faça login, DEIXE ABERTO
+```
+
+O portal é lido por um Chrome **normal** ao qual o robô se conecta por CDP. Não é preferência de estilo: um Chrome lançado pelo Playwright é reprovado pelo Turnstile mesmo com um humano clicando na caixa — as marcas de automação entregam o navegador. Quem clica é sempre você; o robô só lê a página que você autenticou.
+
+## Comandos
+
+| Comando | O que faz |
+|---|---|
+| `npm run dry` | Roda tudo e gera o PDF **sem enviar nada** |
+| `npm run once` | Pipeline completo agora, com envio real |
+| `npm run once -- --data=07/08/2026` | Força uma data específica |
+| `npm run teste` | Verificações da contagem de prazo |
+| `npm run abrir-chrome` | Abre o Chrome do portal (login + Cloudflare) |
+| `npm run inspecionar` | Conecta na janela aberta para capturar seletores |
+| `npm run setup:whatsapp` | Reconecta o WhatsApp (novo QR) |
+| `npm run register-task` | (Re)cria as tarefas agendadas |
+
+Flags: `--dry`, `--data=dd/mm/aaaa`, `--retry` (no-op se o dia já está resolvido), `--variantes` (varre os sufixos de inscrição).
+
+## Estado
+
+- [x] Fonte CNJ (DJEN), com paginação, retentativa e limpeza do HTML
+- [x] União das fontes com dedupe conservador
+- [x] PDF, e-mail e WhatsApp independentes
+- [x] Estado por dia + retries condicionais
+- [x] Contagem de prazo
+- [ ] **Portal da OAB** — seletores da tela de publicações ainda por mapear (`TODO(fase-1)` em `src/sources/portal.js`)
+- [ ] **E-mail** — depende de uma Senha de app do Google; enquanto não existir, `CANAIS=whatsapp` mantém a automação de pé
+
+## Limites conhecidos
+
+- **O robô não sabe de quem é o prazo.** A regra do prazo único evita o caso ruidoso, mas um ato com prazo único dirigido ao perito ainda sai como se fosse seu. Só leitura humana resolve.
+- **PC desligado às 14h** = risco de perder o dia. A tarefa tem "executar assim que possível se perdida", o que cobre ligar mais tarde no mesmo dia.
+- **`whatsapp-web.js` é não-oficial.** Se a sessão cair, precisa reescanear o QR. Por isso os canais são independentes.
+- **A API do CNJ limita requisição sem documentar o limite** e recusa IP fora do Brasil (HTTP 403).
+- **O portal pode mudar de layout.** Os seletores preferem texto visível a IDs internos, que sobrevive melhor a redesenho.
+
+## Aviso
+
+Ferramenta de apoio. **Não substitui a conferência oficial** no diário e nos autos. Todo vencimento exibido é estimativa: não considera feriado local, suspensão do tribunal, prazo em dobro nem de quem é o prazo.
+
+## Segurança
+
+Credenciais e sessões **nunca** entram no repositório — o `.gitignore` cobre `.env`, `chrome-profile/` (cookie de login), `.wwebjs_auth/` (sessão do WhatsApp, vale como acesso à conta), `state.json`, `out/` e `logs/` (PDFs e dados de processos).
+
+---
+
+Documentação completa, decisões de projeto e diagnóstico de falhas: **[PLANO.md](PLANO.md)**.
