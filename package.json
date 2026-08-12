@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Consulta diaria das publicacoes do DJ no portal da OAB SP e envio por e-mail e WhatsApp",
+  "description": "Consulta diária das publicações do Diário da Justiça pela inscrição da OAB e avisa por WhatsApp e e-mail, com PDF do inteiro teor e contagem de prazo em dias úteis",
   "engines": {
     "node": ">=22"
   },
