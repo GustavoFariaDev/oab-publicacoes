@@ -77,6 +77,14 @@ export function escreverPrazo(doc, pub) {
       'Estimativa. Não inclui feriado estadual/municipal/forense, suspensão do tribunal' +
         ' nem prazo em dobro. Confira no processo.',
     );
+    // A unica parte da conta que veio de configuracao humana — e a unica cujo
+    // erro empurra o vencimento para FRENTE. Fica dito de onde veio.
+    if (p.feriadosLocais.length) {
+      ressalva(
+        `Esta data considera feriado local configurado à mão: ${p.feriadosLocais.join(', ')}.` +
+          ' Se não for feriado na comarca, o vencimento real é ANTES do exibido.',
+      );
+    }
   } else if (p.unidade === 'horas') {
     doc.moveDown(0.2);
     doc.font('Helvetica-Bold').fillColor('#b00020');

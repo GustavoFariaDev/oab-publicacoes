@@ -61,11 +61,11 @@ Cada publicação sai com as datas já calculadas:
 | Contagem começa | primeiro dia útil após a publicação |
 | Vencimento | em dias úteis, pulando feriado e recesso |
 
-Feriados: nacionais fixos, móveis derivados da Páscoa pelo algoritmo de Meeus (carnaval, Sexta-feira Santa, Corpus Christi) e o **recesso de 20/12 a 20/01** (art. 220). Feriado estadual, municipal ou forense entra à mão em `FERIADOS_EXTRA` — não há fonte offline confiável para eles.
+Feriados: nacionais fixos, móveis derivados da Páscoa pelo algoritmo de Meeus (carnaval, Sexta-feira Santa, Corpus Christi) e o **recesso de 20/12 a 20/01** (art. 220). Feriado estadual, municipal ou forense entra à mão em `FERIADOS_EXTRA` — não há fonte offline confiável para eles. **O erro aqui é assimétrico**: feriado que falta adianta o vencimento (seguro), feriado inventado o empurra para frente (perde prazo). Por isso só entra data conferida no calendário do TJSP, e todo vencimento que usar uma delas sai dizendo que usou.
 
 **O vencimento só é calculado quando o texto declara um único prazo.** Com mais de um, o robô lista os prazos e não arrisca data. Isso veio de um caso real: um despacho citava quatro prazos — cinco e trinta dias do *perito*, dez para os *esclarecimentos dele*, e quinze das partes que só corriam **depois da entrega do laudo**. Nenhum era do advogado naquele dia. Uma versão anterior escolhia o menor e teria estampado um vencimento que não existia. Data falsa não é cautela: gasta a confiança no aviso, e no dia em que o vencimento for verdadeiro ele vai parecer mais um palpite.
 
-`npm run teste` roda as 76 verificações dessa lógica.
+`npm run teste` roda as 141 verificações do projeto.
 
 ## Instalação
 
@@ -93,7 +93,8 @@ O portal é lido por um Chrome **normal** ao qual o robô se conecta por CDP. N�
 | `npm run dry` | Roda tudo e gera o PDF **sem enviar nada** |
 | `npm run once` | Pipeline completo agora, com envio real |
 | `npm run once -- --data=07/08/2026` | Força uma data específica |
-| `npm run teste` | Verificações da contagem de prazo |
+| `npm run teste` | Roda as 141 verificações (prazo, união, estado, saúde) |
+| `npm run checar` | Confere se o dia fechou e avisa se não |
 | `npm run abrir-chrome` | Abre o Chrome do portal (login + Cloudflare) |
 | `npm run inspecionar` | Conecta na janela aberta para capturar seletores |
 | `npm run setup:whatsapp` | Reconecta o WhatsApp (novo QR) |

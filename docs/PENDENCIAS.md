@@ -33,22 +33,29 @@ Estado em **12/08/2026, 15h30**. Cada item diz o que é, o que custa deixar como
 
 ## 3. Feriados locais fora da conta de prazo
 
-**Estado:** `FERIADOS_EXTRA` vazio.
+**Estado:** `FERIADOS_EXTRA` vazio — **de propósito**.
 
 **O que a conta já sabe:** feriados nacionais fixos, os móveis derivados da Páscoa (carnaval, Sexta-feira Santa, Corpus Christi) e o recesso de 20/12 a 20/01.
 
 **O que ela não tem como saber:** feriado estadual, municipal e forense. Não existe fonte offline confiável.
 
-**O que custa:** um vencimento estimado pode sair **um dia adiantado** — direção segura do erro, mas gera ruído.
+**A assimetria, que é o ponto todo:**
 
-**O que fazer:** preencher `FERIADOS_EXTRA` no `.env` com `dd/mm/aaaa` separados por vírgula. Para o resto de 2026, o que cai em dia útil:
-
-| Data | Dia | O que é |
+| Erro | Efeito na contagem | Consequência |
 |---|---|---|
-| 08/12/2026 | terça | Dia da Justiça (feriado forense) |
-| — | — | Aniversários das comarcas onde você atua (São Bernardo, Santo André): **conferir no calendário do TJSP** |
+| **Faltou** um feriado real | conta um dia que não existia → vencimento **mais cedo** | você age antes. Seguro |
+| **Sobrou** um feriado falso | pula um dia útil real → vencimento **mais tarde** | acha que tem tempo. **Perde o prazo** |
 
-01/11/2026 cai num domingo e 25/12/2026 já é nacional — nenhum dos dois muda nada.
+Por isso não se cola lista de feriado sem conferir. Chegou a haver `08/12/2026` aqui (Dia da Justiça) e uma sugestão de sete datas de ponte atribuídas ao Provimento CSM — todas plausíveis pelo padrão (segunda antes de feriado na terça, sexta depois de feriado na quinta), **nenhuma confirmada na fonte**. Foram retiradas: a página do TJSP carrega o calendário por JavaScript e por município, e não deu para ler.
+
+**O que fazer** (10 minutos, uma vez por ano):
+
+1. Abrir o [Expediente Forense do TJSP](https://www.tjsp.jus.br/CanaisComunicacao/Feriados/ExpedienteForense)
+2. Selecionar **a sua comarca** (São Bernardo, Santo André — cada uma tem as suas)
+3. Copiar as datas de 2026 sem expediente
+4. Preencher `FERIADOS_EXTRA=dd/mm/aaaa,dd/mm/aaaa` no `.env`
+
+**Rede de segurança já implementada:** todo vencimento que dependeu de uma data do `FERIADOS_EXTRA` sai dizendo isso — no WhatsApp, no e-mail e no PDF, com a frase *"se não for feriado na comarca, o vencimento real é ANTES do exibido"*. Data errada deixou de ser invisível.
 
 ---
 
@@ -78,7 +85,17 @@ O portal corta a intimação em ~986 caracteres. Quando a publicação também v
 
 ---
 
-## 6. Falta a primeira execução completa de ponta a ponta
+## ~~6. Silêncio indistinguível de falha~~ — RESOLVIDO em 12/08/2026
+
+Uma tarefa às **18h** (`npm run checar`) lê o estado do dia e avisa se ele não fechou: sem entrega registrada, canal configurado faltando, fonte incompleta, contagem que não bate, ou erro recente. Dia certo não gera mensagem — alerta diário de "está tudo bem" vira ruído, e ruído é o que faz um alerta ser ignorado no dia em que importa.
+
+Ele confere os canais **configurados**, não um canal fixo: com `CANAIS=whatsapp` não alerta por falta de e-mail, e um canal novo no `.env` entra na conferência sozinho.
+
+**Limite honesto:** o vigia mora na mesma máquina que ele vigia. PC desligado = não roda na hora (a tarefa tem `StartWhenAvailable`, então dispara quando a máquina voltar — tarde, mas dispara). E se **todos** os canais estiverem mortos, o aviso também não sai. Vigia interno cobre falha de parte; falha total só um vigia de fora cobriria.
+
+---
+
+## 7. Falta a primeira execução completa de ponta a ponta
 
 Nunca aconteceu um 14h com **tudo junto**: dia zerado, portal ligado desde o início e dois canais. A de 12/08 rodou com o portal desligado e o dia já entregue.
 

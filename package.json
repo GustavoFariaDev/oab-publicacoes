@@ -15,7 +15,8 @@
     "setup:whatsapp": "node scripts/setup-whatsapp.js",
     "register-task": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/register-task.ps1",
     "abrir-chrome": "node scripts/abrir-chrome.js",
-    "explorar": "node scripts/explorar.js"
+    "explorar": "node scripts/explorar.js",
+    "checar": "node scripts/checar-dia.js"
   },
   "dependencies": {
     "nodemailer": "^6.9.16",

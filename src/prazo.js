@@ -124,6 +124,36 @@ export function ehDiaUtil(d) {
   return !emRecesso(d);
 }
 
+/** As datas de FERIADOS_EXTRA, como Set de "aaaa-mm-dd" (so as validas). */
+function chavesLocais() {
+  const set = new Set();
+  for (const bruto of config.feriadosExtra) {
+    const d = deBR(bruto);
+    if (d) set.add(chave(d));
+  }
+  return set;
+}
+
+/**
+ * Feriados LOCAIS que caem dentro de um intervalo (inclusive).
+ *
+ * Serve para a saida poder dizer de onde veio a data. Feriado local e a unica
+ * parte da conta que vem de configuracao humana, e e a parte cujo erro empurra
+ * o vencimento para FRENTE — o lado que faz perder prazo. Um feriado nacional
+ * errado seria bug meu; um feriado local errado e uma linha do .env que
+ * ninguem lembra de conferir. Entao ele aparece.
+ */
+export function feriadosLocaisNoIntervalo(inicio, fim) {
+  const locais = chavesLocais();
+  if (!locais.size) return [];
+
+  const achados = [];
+  for (let d = inicio; d <= fim; d = somarDias(d, 1)) {
+    if (locais.has(chave(d))) achados.push(paraBR(d));
+  }
+  return achados;
+}
+
 /** Primeiro dia util a partir de (e incluindo) a data dada. */
 export function diaUtilSeguinte(d, { incluirHoje = false } = {}) {
   let atual = incluirHoje ? d : somarDias(d, 1);
@@ -274,6 +304,9 @@ export function calcularPrazo(pub) {
     unidade: unico?.unidade ?? null,
     tipo: unico?.tipo ?? null,
     citados: distintos.map(({ quantidade, unidade }) => ({ quantidade, unidade })),
+    // Do inicio da contagem ate o vencimento: e o trecho em que um feriado
+    // local muda a data. Fora dele, ele nao influenciou nada.
+    feriadosLocais: fatal ? feriadosLocaisNoIntervalo(inicio, fatal) : [],
   };
 }
 
@@ -289,7 +322,10 @@ export function resumirPrazo(pub) {
   if (!p) return null;
 
   if (p.fatal) {
-    return `⏳ ${porExtenso(p)} — vence ${p.fatal} (estimativa, confira)`;
+    const local = p.feriadosLocais.length
+      ? ` [considera feriado local: ${p.feriadosLocais.join(', ')}]`
+      : '';
+    return `⏳ ${porExtenso(p)} — vence ${p.fatal} (estimativa, confira)${local}`;
   }
   if (p.unidade === 'horas') {
     return `⏳ ${p.quantidade} horas a contar da intimação — contagem começa ${p.inicio} (confira)`;

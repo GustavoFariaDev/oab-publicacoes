@@ -82,6 +82,13 @@ Register-OabTask -Name 'OAB Publicacoes - retry 17h' -Time '17:00' `
     -Arguments 'src\index.js --retry' `
     -Description 'Retry condicional: so roda se o dia estiver vazio ou incompleto.'
 
+# Guarda-noturno. Nao coleta nem reenvia: le o estado e avisa se o dia nao
+# fechou. Existe porque silencio hoje significa duas coisas opostas — "nao
+# havia publicacao" e "a automacao falhou sem conseguir avisar".
+Register-OabTask -Name 'OAB Publicacoes - checagem 18h' -Time '18:00' `
+    -Arguments 'scripts\checar-dia.js' `
+    -Description 'Confere se o dia fechou (entrega por todos os canais, fontes inteiras) e avisa se nao.'
+
 Write-Host ''
 Write-Host 'Pronto. Para conferir:'
 Write-Host '  Get-ScheduledTask -TaskName "OAB Publicacoes*"'

@@ -4,7 +4,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const AQUI = path.dirname(fileURLToPath(import.meta.url));
-const SUITES = ['prazo.mjs', 'merge.mjs', 'estado.mjs'];
+const SUITES = ['prazo.mjs', 'merge.mjs', 'estado.mjs', 'saude.mjs', 'feriado-local.mjs'];
 
 let falhou = false;
 const resumo = [];

@@ -38,7 +38,15 @@ function linhaPrazo(pub) {
     return (
       `<br><strong style="color:#b00020">⏳ Vence em ${p.fatal}</strong>` +
       `<span style="color:#666"> — ${p.quantidade} dias ${tipo}, contagem a partir de ${p.inicio}</span>` +
-      cinza('Estimativa: não inclui feriado local/forense, suspensão do tribunal nem prazo em dobro.')
+      cinza('Estimativa: não inclui feriado local/forense, suspensão do tribunal nem prazo em dobro.') +
+      // Feriado local e a unica parte vinda de configuracao humana, e a unica
+      // cujo erro joga o vencimento para FRENTE. Aparece quando influenciou.
+      (p.feriadosLocais.length
+        ? cinza(
+            `⚠ Considera feriado local configurado à mão (${p.feriadosLocais.join(', ')}). ` +
+              'Se não for feriado na comarca, o vencimento real é ANTES do exibido.',
+          )
+        : '')
     );
   }
   if (p.unidade === 'horas') {
