@@ -70,15 +70,58 @@ function normalizarTexto(texto = '') {
     .trim();
 }
 
-/** Jaccard sobre conjuntos de palavras — barato e suficiente aqui. */
-function similaridade(a, b) {
-  if (a === b) return 1;
-  if (!a || !b) return 0;
-  const A = new Set(a.split(' '));
-  const B = new Set(b.split(' '));
+/** Palavras unicas de um texto ja normalizado. */
+function palavras(texto = '') {
+  return new Set(texto.split(' ').filter(Boolean));
+}
+
+/**
+ * Quanto do texto MENOR cabe dentro do maior (|A∩B| / |menor|).
+ *
+ * Nao e Jaccard, e a troca foi medida: o portal da OAB corta o texto da
+ * intimacao em ~986 caracteres e termina com "...", enquanto a API do CNJ
+ * entrega o inteiro teor. No dia 12/08/2026 os cinco pares reais da mesma
+ * publicacao davam Jaccard 0,18 a 0,82 — abaixo de qualquer limiar util, e um
+ * deles (texto de 7805 caracteres contra 986) despencava justamente por ser o
+ * mais longo. Pela contencao, os mesmos cinco pares deram 0,97 a 1,00.
+ *
+ * Jaccard pergunta "estes dois textos sao o mesmo texto?". Aqui a pergunta e
+ * outra: "este resumo e o comeco daquele inteiro teor?".
+ */
+function contencao(A, B) {
+  if (!A.size || !B.size) return 0;
   let comuns = 0;
   for (const t of A) if (B.has(t)) comuns++;
-  return comuns / (A.size + B.size - comuns);
+  return comuns / Math.min(A.size, B.size);
+}
+
+/**
+ * Piso de tamanho para a contencao valer.
+ *
+ * Contencao e generosa por natureza: um texto de cinco palavras cabe dentro de
+ * quase qualquer coisa. Abaixo deste piso, duas intimacoes curtas e
+ * padronizadas ("Ciencia as partes.") seriam declaradas a mesma publicacao.
+ */
+const MINIMO_PALAVRAS = 15;
+
+/** O portal corta a intimacao e marca o corte com reticencias. */
+const truncado = (texto = '') => /\.\.\.\s*$/.test(texto);
+
+/**
+ * Entre os textos das duas fontes para a MESMA publicacao, qual fica.
+ *
+ * Comprimento sozinho nao serve, e o caso real esta em 12/08/2026, processo
+ * 4008232-46.2025.8.26.0554: a API entregou 470 caracteres inteiros e o portal
+ * 986 truncados. "Fica o maior" escolhia a previa cortada e o advogado recebia
+ * a intimacao pela metade — com mais caracteres.
+ *
+ * Entao: texto inteiro ganha de texto cortado, sempre. Entre dois inteiros (ou
+ * dois cortados), ganha o maior.
+ */
+function melhorTexto(candidato = '', atual = '') {
+  if (truncado(atual) && !truncado(candidato)) return true;
+  if (truncado(candidato) && !truncado(atual)) return false;
+  return candidato.length > atual.length;
 }
 
 /** Agrupador: mesmo processo, mesmo dia. Dentro disso e que se compara texto. */
@@ -116,16 +159,35 @@ export function unir(porFonte) {
       if (!grupos.has(chave)) grupos.set(chave, []);
       const grupo = grupos.get(chave);
       const texto = normalizarTexto(pub.intimacao);
+      const tokens = palavras(texto);
 
       // Só procura par entre registros de OUTRA fonte (regra 1).
       let alvo = null;
-      let melhor = LIMIAR;
-      for (const cand of grupo) {
-        if (cand.fontes.includes(fonte)) continue;
-        const s = similaridade(texto, cand._texto);
-        if (s >= melhor) {
-          melhor = s;
-          alvo = cand;
+
+      // Prova antes de indício: o "Identificador do documento" que o portal
+      // mostra é o mesmo número que a API do CNJ devolve como "id". Quando os
+      // dois existem e batem, é a mesma publicação e não há o que comparar.
+      // (Nem toda publicação do portal traz esse campo — as que não vêm do
+      // DJEN não têm. Por isso ele resolve parte dos casos, não todos.)
+      if (pub.identificador) {
+        alvo =
+          grupo.find(
+            (cand) =>
+              !cand.fontes.includes(fonte) &&
+              Object.values(cand.identificadores).includes(pub.identificador),
+          ) ?? null;
+      }
+
+      if (!alvo) {
+        let melhor = LIMIAR;
+        for (const cand of grupo) {
+          if (cand.fontes.includes(fonte)) continue;
+          if (Math.min(tokens.size, cand._tokens.size) < MINIMO_PALAVRAS) continue;
+          const s = contencao(tokens, cand._tokens);
+          if (s >= melhor) {
+            melhor = s;
+            alvo = cand;
+          }
         }
       }
 
@@ -134,6 +196,7 @@ export function unir(porFonte) {
           ...pub,
           fontes: [fonte],
           _texto: texto,
+          _tokens: tokens,
           // Guarda o identificador de CADA fonte que contribuiu, nao so da que
           // criou o grupo. O identificador top-level (pub.identificador) muda
           // conforme qual fonte chega primeiro nesta execucao (ordem de
@@ -154,14 +217,17 @@ export function unir(porFonte) {
       for (const campo of ['partes', 'advogados']) {
         if (!alvo[campo]?.length && pub[campo]?.length) alvo[campo] = pub[campo];
       }
-      if ((pub.intimacao || '').length > (alvo.intimacao || '').length) {
+      if (melhorTexto(pub.intimacao, alvo.intimacao)) {
         alvo.intimacao = pub.intimacao;
         alvo._texto = texto;
+        alvo._tokens = tokens;
       }
     }
   }
 
-  const publicacoes = [...grupos.values()].flat().map(({ _texto, ...p }) => p);
+  // Os dois campos de trabalho saem aqui. _tokens e um Set: escapar daqui o
+  // levaria ao PDF, ao e-mail e ao JSON do estado, onde vira "{}" silencioso.
+  const publicacoes = [...grupos.values()].flat().map(({ _texto, _tokens, ...p }) => p);
 
   // Exclusividade de fonte e sinal operacional: ou a outra fonte falhou, ou
   // aquela publicacao so existe num dos diarios. Nos dois casos vale saber.

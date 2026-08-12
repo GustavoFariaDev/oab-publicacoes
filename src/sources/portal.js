@@ -22,20 +22,41 @@ import { conectarChromeAberto, isCloudflareChallenge } from '../browser.js';
  */
 
 /**
- * TODO(fase-1): SELETORES A CONFIRMAR COM O PORTAL ABERTO.
- * Preencher com scripts/explorar.js rodando contra a sessao ja autenticada.
- * Prefira sempre texto visivel (getByRole/getByText) a ID do ASP.NET.
+ * Seletores mapeados na sessao de 12/08/2026, contra a tela real.
+ *
+ * Onde ha texto visivel, ele vem primeiro: "Consultar" e "Visualizar tudo" sao
+ * o rotulo que o usuario le, e sobrevivem a remontagem do ASP.NET.
+ *
+ * Onde nao ha (os campos de data), o ID gerado e a unica ancora — mas casado
+ * pelo SUFIXO (`[id$="txtSelDataInicio"]`) em vez do ID inteiro. O prefixo
+ * `ctl00_ContentPlaceHolder1_` descreve onde o controle esta na arvore de
+ * master pages e muda se a pagina for reorganizada; o sufixo e o nome que o
+ * programador deu ao campo, e esse so muda se o campo mudar de proposito.
  */
 const SEL = {
   loggedIn: 'text=/Sair|Logout|Bem.?vindo/i',
-  dateFrom: 'TODO(fase-1)',
-  dateTo: 'TODO(fase-1)',
-  consultar: 'TODO(fase-1)',
-  visualizarTudo: 'TODO(fase-1)',
-  resumoCard: 'TODO(fase-1)',
-  publicacaoCard: 'TODO(fase-1)',
-  proximaPagina: 'TODO(fase-1)',
+  dateFrom: 'input[id$="txtSelDataInicio"]',
+  dateTo: 'input[id$="txtSelDataFim"]',
+  consultar: 'input[value="Consultar"]',
+  visualizarTudo: 'input[value="Visualizar tudo"]',
+  resumoCard: 'div.div-item',
+  // Ancorado na tabela de resultados de proposito: durante um postback do
+  // UpdatePanel chegou a haver um `section.conteudo` do render anterior ainda
+  // solto no DOM. Preso ao grid, sobra nao entra na conta.
+  publicacaoCard: 'table[id$="gdvPublicacoes"] section.conteudo',
+  cabecalhoCard: 'span[id$="lblPublicacaoTitulo"]',
+  textoCard: 'span[id$="lblPublicacaoTexto"]',
 };
+
+/**
+ * A lista pagina de 10 em 10 por __doPostBack, com links numerados ("1 2 3 4
+ * 5 ..."), sem botao "Proximo". Clicar no numero seguinte funcionaria enquanto
+ * ele estivesse visivel — mas a partir da 6a pagina o pager troca a janela de
+ * numeros por "...", e um laco que procura "o proximo numero" trava ali.
+ * Chamar o postback direto pede qualquer pagina, visivel ou nao.
+ */
+const PAGER = 'ctl00$ContentPlaceHolder1$ListaPublicacaoResultado$gdvPublicacoes';
+const POR_PAGINA = 10;
 
 const CAMPOS = {
   dataDisponibilizacao: 'Data de disponibilização',
@@ -77,7 +98,15 @@ export async function buscarNoPortal(dataBR) {
     if (esperado === 0) return { publicacoes: [], avisos: [], completo: true };
 
     await page.locator(SEL.visualizarTudo).first().click();
-    await page.waitForLoadState('networkidle');
+    // Espera a LISTA aparecer, nao a rede sossegar: o "Visualizar tudo" e um
+    // postback de UpdatePanel, e "networkidle" volta na hora porque a pagina ja
+    // estava parada. Medido: 125ms entre o clique e a leitura, com a lista
+    // ainda vazia — o robo lia zero publicacao num dia de sete e so o
+    // guard-rail de contagem denunciava.
+    await page
+      .locator(SEL.publicacaoCard)
+      .first()
+      .waitFor({ state: 'visible', timeout: config.navTimeoutMs });
 
     const publicacoes = await extrairPublicacoes(page);
     await salvarScreenshot(page, dataBR);
@@ -106,16 +135,29 @@ export async function buscarNoPortal(dataBR) {
   }
 }
 
-/** TODO(fase-1): mapear o caminho de menu ate a tela de publicacoes. */
+/**
+ * Vai direto pela URL, em vez de clicar no menu.
+ *
+ * A tela e um .aspx com endereco proprio e estavel; percorrer o menu para
+ * chegar nela seria mais um punhado de seletores para quebrar, sem ganho.
+ */
 async function irParaPublicacoesPorData(page) {
-  throw new Error('TODO(fase-1): navegacao ate "Historico > Publicacoes por Data".');
+  await page.goto(config.urls.publicacoes, { waitUntil: 'domcontentloaded' });
+  if (!(await page.locator(SEL.dateFrom).count())) {
+    throw new Error('Cheguei em "Publicacoes por Data" mas nao achei os campos de data.');
+  }
 }
 
 async function filtrarPorDia(page, dataBR) {
+  // Mesmo dia nos dois campos: a tela consulta por intervalo, e o robo trabalha
+  // sempre com um dia fechado.
   await page.locator(SEL.dateFrom).fill(dataBR);
   await page.locator(SEL.dateTo).fill(dataBR);
+  // O filtro de estado fica em "Todos", que e o padrao — e o que traz MG e
+  // Uniao, a razao de existir desta fonte.
   await page.locator(SEL.consultar).first().click();
-  await page.waitForLoadState('networkidle');
+  await page.waitForLoadState('networkidle').catch(() => {});
+  await page.waitForTimeout(1500);
 }
 
 /**
@@ -135,35 +177,62 @@ async function somarCardsDoDia(page, dataBR) {
 }
 
 /**
- * O portal pagina de 10 em 10 ("Exibindo resultados de 1 a 10").
+ * Percorre todas as paginas da lista ("Exibindo resultados de 1 a 10").
  *
- * Enquanto SEL.proximaPagina estiver TODO, o laco para na primeira pagina. Isso
- * nao passa despercebido: buscarNoPortal compara o resultado com o resumo do
- * dia e a diferenca vira aviso em destaque + dia incompleto.
+ * O numero de paginas sai do total declarado pela propria tela, nao de "existe
+ * link para a proxima?": e o mesmo motivo de a paginacao ser feita por
+ * postback direto — nao depender de qual numero esta visivel no pager.
  */
 async function extrairPublicacoes(page) {
   const publicacoes = [];
   const declarado = await lerTotalDeclarado(page);
-  const vistas = new Set();
+  const paginas = declarado === null ? 1 : Math.ceil(declarado / POR_PAGINA);
 
-  for (;;) {
+  for (let pagina = 1; pagina <= paginas; pagina++) {
+    if (pagina > 1) {
+      const mudou = await irParaPagina(page, pagina);
+      if (!mudou) {
+        log.warn(`Portal: a pagina ${pagina} nao carregou — parando com ${publicacoes.length}.`);
+        break;
+      }
+    }
     for (const card of await page.locator(SEL.publicacaoCard).all()) {
       publicacoes.push(await extrairCard(card));
     }
-    if (declarado !== null && publicacoes.length >= declarado) break;
-
-    const proxima = page.locator(SEL.proximaPagina).first();
-    const temProxima = SEL.proximaPagina !== 'TODO(fase-1)' && (await proxima.count()) > 0;
-    if (!temProxima || (await proxima.isDisabled().catch(() => false))) break;
-
-    const marca = await page.locator(SEL.publicacaoCard).first().innerText();
-    if (vistas.has(marca)) break;
-    vistas.add(marca);
-
-    await proxima.click();
-    await page.waitForLoadState('networkidle');
   }
   return publicacoes;
+}
+
+/**
+ * Pede uma pagina pelo postback do GridView e confirma que ela trocou.
+ *
+ * A confirmacao existe porque o postback e assincrono e nao devolve promessa:
+ * sem comparar o conteudo antes/depois, uma pagina que nao carregou seria lida
+ * de novo e as publicacoes sairiam duplicadas em vez de faltando — que e o
+ * erro mais dificil de perceber dos dois.
+ */
+async function irParaPagina(page, numero) {
+  const antes = await page.locator(SEL.publicacaoCard).first().innerText().catch(() => '');
+
+  await page.evaluate(
+    ([alvo, n]) => window.__doPostBack(alvo, `Page$${n}`),
+    [PAGER, numero],
+  );
+
+  try {
+    await page.waitForFunction(
+      ([seletor, texto]) => {
+        const primeiro = document.querySelector(seletor);
+        return primeiro && primeiro.innerText !== texto;
+      },
+      [SEL.publicacaoCard, antes],
+      { timeout: config.navTimeoutMs },
+    );
+  } catch {
+    return false;
+  }
+  await page.waitForLoadState('networkidle').catch(() => {});
+  return true;
 }
 
 async function lerTotalDeclarado(page) {
@@ -172,15 +241,50 @@ async function lerTotalDeclarado(page) {
   return m ? Number(m[1]) : null;
 }
 
+/**
+ * Le uma publicacao.
+ *
+ * Cabecalho e corpo saem de dois spans distintos, e nao de um recorte do texto
+ * do card inteiro. A versao anterior separava os dois cortando em "Intimação" —
+ * o que quebra justamente nas publicacoes cujo TITULO e "Intimação" (metade
+ * delas): o corte caia no cabecalho e o corpo vinha picado.
+ */
+/** "Número do processo" -> "numero do processo": casa rotulo sem depender de acento. */
+function chaveRotulo(texto = '') {
+  return texto
+    .normalize('NFD')
+    .replace(/\p{Diacritic}/gu, '')
+    .toLowerCase()
+    .trim();
+}
+
 async function extrairCard(card) {
-  const texto = await card.innerText();
-  const campo = (rotulo) => texto.match(new RegExp(`${rotulo}\\s*:\\s*(.+)`, 'i'))?.[1]?.trim() ?? '';
+  const corpo = await card.locator(SEL.textoCard).innerText().catch(() => '');
+
+  // Cada campo e um <li> proprio, e e assim que sao lidos — um por um.
+  //
+  // Ler o cabecalho inteiro e recortar por regex NAO funciona: os <li> ficam
+  // dentro de um <span>, que e inline, entao o innerText nao poe quebra de
+  // linha entre eles. Um "(.*)" apos o rotulo engolia todos os campos
+  // seguintes: "Numero do processo" saia como "1039487-77.2024.8.26.0564
+  // Pagina: 00001", e nenhuma publicacao casava com a mesma vinda da API.
+  const valores = new Map();
+  for (const item of await card.locator(`${SEL.cabecalhoCard} li`).allInnerTexts()) {
+    const corte = item.indexOf(':');
+    if (corte < 0) continue;
+    valores.set(chaveRotulo(item.slice(0, corte)), item.slice(corte + 1).trim());
+  }
 
   const pub = { fonte: 'Portal' };
-  for (const [chave, rotulo] of Object.entries(CAMPOS)) pub[chave] = campo(rotulo);
+  for (const [chave, rotulo] of Object.entries(CAMPOS)) {
+    pub[chave] = valores.get(chaveRotulo(rotulo)) ?? '';
+  }
 
-  pub.intimacao = texto.split(/Intima[cç][aã]o/i).slice(1).join('\n').replace(/\s+/g, ' ').trim();
-  pub.identificador = pub.intimacao.match(/Identificador do documento:\s*(\d+)/i)?.[1] ?? '';
+  pub.intimacao = corpo.replace(/[ \t]+/g, ' ').replace(/\n{3,}/g, '\n\n').trim();
+  // O mesmo numero que a API do CNJ devolve como "id" — e o que faz o dedupe
+  // entre as duas fontes casar de verdade, em vez de depender de similaridade
+  // de texto. Nem toda publicacao tem (as que nao vem do DJEN nao tem).
+  pub.identificador = corpo.match(/Identificador do documento:\s*(\d+)/i)?.[1] ?? '';
   return pub;
 }
 

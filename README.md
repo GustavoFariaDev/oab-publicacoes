@@ -40,12 +40,15 @@ Mesmo assim, **os retries sempre coletam de novo**. Publicação entra no diári
 |---|---|---|
 | Acesso | pública, sem autenticação | login + Cloudflare Turnstile |
 | Cobertura | DJEN | DJEN **+ diários de MG e da União** |
-| Medido em 01/07–11/08/2026 | 152 publicações | ~179 (~15% mais) |
+| Texto da intimação | inteiro teor | prévia cortada em ~986 caracteres |
+| Medido em 12/08/2026 | 5 publicações | 7 |
 | Confiabilidade | alta | depende de sessão viva no Chrome |
 
-Elas são unidas, não escolhidas. **Cada uma falha isolada**: se uma cai, a outra ainda entrega e a queda vira aviso em destaque — nunca um número menor sem explicação. Se as duas caem, aí é erro, porque um "0 publicações" silencioso é indistinguível de um dia realmente vazio.
+Elas são unidas, não escolhidas — e **nenhuma contém a outra**. Medido em 12/08/2026: a API trouxe 5 e o portal 7; das 7, duas só existiam no portal. Em 06/08 foi ao contrário: a API trouxe 14 contra 11 do portal, porque inclui TRT e TRF que o caderno "DJ SP" não conta.
 
-O dedupe entre fontes exige similaridade alta (Jaccard ≥ 0,9) do texto inteiro, e **dentro** de uma mesma fonte nada é fundido: o mesmo processo pode ter duas intimações distintas no mesmo dia cujos primeiros 160 caracteres são idênticos, porque o cabeçalho da vara é padronizado.
+**Cada uma falha isolada**: se uma cai, a outra ainda entrega e a queda vira aviso em destaque — nunca um número menor sem explicação. Se as duas caem, aí é erro, porque um "0 publicações" silencioso é indistinguível de um dia realmente vazio.
+
+O casamento entre fontes é por **identificador do documento** quando ele existe (o portal mostra o mesmo número que a API devolve como `id`) e, quando não existe, por **contenção** do texto — quanto do texto menor cabe dentro do maior. Não é Jaccard: como o portal corta a intimação, os cinco pares reais de 12/08 davam Jaccard de 0,18 a 0,82 e contenção de 0,97 a 1,00. Já **dentro** de uma mesma fonte nada é fundido: o mesmo processo pode ter duas intimações distintas no mesmo dia.
 
 ## Contagem de prazo
 
@@ -105,7 +108,7 @@ Flags: `--dry`, `--data=dd/mm/aaaa`, `--retry` (no-op se o dia já está resolvi
 - [x] PDF, e-mail e WhatsApp independentes
 - [x] Estado por dia + retries condicionais
 - [x] Contagem de prazo
-- [ ] **Portal da OAB** — seletores da tela de publicações ainda por mapear (`TODO(fase-1)` em `src/sources/portal.js`)
+- [x] **Portal da OAB** — mapeado e funcionando (`PORTAL=1`), com paginação e guard-rail de contagem
 - [ ] **E-mail** — depende de uma Senha de app do Google; enquanto não existir, `CANAIS=whatsapp` mantém a automação de pé
 
 Detalhes e prioridade em **[docs/PENDENCIAS.md](docs/PENDENCIAS.md)**.

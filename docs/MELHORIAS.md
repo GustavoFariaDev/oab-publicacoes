@@ -38,6 +38,14 @@ https://comunicaapi.pje.jus.br/api/v1/comunicacao/{hash}/certidao
 
 **Risco — leia antes de fazer:** o valor está em **marcar dúvida**, nunca em esconder. Um prazo classificado como "do perito" e omitido é exatamente o modo de falhar que o projeto inteiro evita. A saída certa é uma ressalva a mais ("este prazo parece ser do perito"), nunca uma publicação a menos.
 
+### 3b. Texto inteiro das publicações que só existem no portal
+
+**Hoje:** o portal corta a intimação em ~986 caracteres e marca o corte com "...". Quando a mesma publicação também vem da API do CNJ, a união fica com o texto inteiro da API — foi o motivo de `melhorTexto()` preferir texto não truncado a texto mais longo. Mas quando a publicação **só** existe no portal (as de MG, da União, e as que o DJEN não trouxe), o que sai no PDF é a prévia cortada.
+
+**Ganho:** o PDF promete inteiro teor. Em 12/08/2026, 1 das 7 publicações saiu cortada.
+
+**Custo:** médio. Provavelmente é clicar na publicação para abrir o detalhe, o que significa mais um seletor e uma navegação por publicação — mais lento e mais frágil. Vale medir antes: se quase toda publicação do portal também vem pela API, o caso raro pode não pagar.
+
 ### 4. Prazo também no e-mail
 
 **Hoje:** as datas calculadas aparecem no WhatsApp e no PDF. O corpo do e-mail lista título, processo, vara e jornal.

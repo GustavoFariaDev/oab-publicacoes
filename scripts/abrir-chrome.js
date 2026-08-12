@@ -46,16 +46,59 @@ const filho = spawn(
 );
 filho.unref();
 
+/**
+ * Confirma que a porta de depuracao subiu de verdade.
+ *
+ * Sem isso, "abri o Chrome" e "o robo enxerga o Chrome" viram a mesma frase na
+ * cabeca de quem esta usando — e nao sao: uma janela normal do navegador (ou
+ * outro navegador) nao tem porta nenhuma, e a diferenca so aparece muito
+ * depois, na forma de "nao achei um Chrome aberto".
+ */
+async function esperarPorta(tentativas = 20) {
+  for (let i = 0; i < tentativas; i++) {
+    try {
+      const r = await fetch(`http://127.0.0.1:${porta}/json/version`, {
+        signal: AbortSignal.timeout(1000),
+      });
+      if (r.ok) return (await r.json()).Browser;
+    } catch {
+      /* ainda subindo */
+    }
+    await new Promise((s) => setTimeout(s, 500));
+  }
+  return null;
+}
+
+const navegador = await esperarPorta();
+
+if (!navegador) {
+  console.error(`
+────────────────────────────────────────────────────────────────
+ O Chrome abriu, mas a porta ${porta} não respondeu.
+
+ Causa mais comum: já havia uma janela do Chrome aberta com ESTE
+ mesmo perfil, e a nova só virou uma aba dela — sem porta.
+ Feche todas as janelas do Chrome e rode de novo.
+────────────────────────────────────────────────────────────────
+`);
+  process.exit(1);
+}
+
 console.log(`
 ────────────────────────────────────────────────────────────────
- Chrome aberto na porta ${porta}, com perfil próprio.
+ ${navegador} aberto na porta ${porta}, com perfil próprio.
+ O robô CONSEGUE enxergar esta janela.
 
- Na janela que abriu:
+ Nela:
    1. Clique em "Confirme que é humano" (Cloudflare), se aparecer
    2. Faça o login no portal da OAB
    3. DEIXE A JANELA ABERTA
 
- Depois disso o robô consegue ler o portal:
+ Atenção: o login do seu navegador do dia a dia (Brave, Edge, outra
+ janela do Chrome) NÃO vale aqui — este é um perfil separado, de
+ propósito. É uma vez só: a sessão fica salva em chrome-profile/.
+
+ Depois disso:
    npm run dry
 ────────────────────────────────────────────────────────────────
 `);

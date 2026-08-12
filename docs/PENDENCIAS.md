@@ -2,39 +2,15 @@
 
 Estado em **12/08/2026**. Cada item diz o que é, o que custa deixar como está, e o que fazer.
 
-Ordem de prioridade: **1 → 2 → 3**. Os itens 4 e 5 são conferências, não trabalho.
-
 ---
 
-## 1. Portal da OAB desligado — a maior falta de cobertura
+## ~~1. Portal da OAB desligado~~ — FEITO em 12/08/2026
 
-**Estado:** `PORTAL=0`. Em `src/sources/portal.js` há **7 seletores** ainda com o valor literal `TODO(fase-1)` e a função `irParaPublicacoesPorData()` só lança erro.
+Mapeado contra a tela real e ligado (`PORTAL=1`). No dia 12/08 o robô passou de 5 para **7 publicações**, achando as duas que só existiam no portal (Campinas e Sumaré). Testado também com paginação (06/08, 11 resultados em 2 páginas) e com o diário de MG (07/08, cards "DJ SP (5)" + "DJ MG (2)" somados).
 
-**O que custa:** o portal agrega os **diários de MG e da União**, que não existem na API do CNJ. Medido em 01/07–11/08/2026: portal ~179 publicações contra 152 da API — cerca de **15% a menos** hoje.
+**O que isso passou a exigir:** a janela do Chrome aberta por `npm run abrir-chrome` precisa estar **aberta e logada às 14h**. Se estiver fechada, o portal falha, o aviso "FONTE INDISPONÍVEL" sai junto com as publicações do CNJ e o dia fica em aberto para os retries — a automação não quebra, mas aquele dia sai só com o DJEN e você recebe o aviso em toda mensagem. Para desligar de vez: `PORTAL=0` no `.env`.
 
-Pior: as duas fontes divergem **nos dois sentidos**, então nenhuma contém a outra. Conferido contra o resumo do portal em 12/08/2026:
-
-| Data | Portal (card) | API do CNJ | |
-|---|---|---|---|
-| 12/08/2026 | DJ SP (7) | 5 | **faltaram 2 do próprio DJ SP** |
-| 11/08/2026 | DJ SP (10) | 10 | bate |
-| 07/08/2026 | DJ SP (5) + DJ MG (2) | 5 | faltaram as 2 de MG |
-| 06/08/2026 | DJ SP (11) | 14 | a API trouxe **3 a mais** (TRT e TRF3, que o card "DJ SP" não conta) |
-
-E há um agravante: **com `PORTAL=0` o robô não enxerga essa falta**. O card do portal é a única contagem independente da nossa extração — é dele que sai o aviso de divergência. Sem ele, 5 publicações num dia de 7 parecem um dia de 5.
-
-**O que fazer** (precisa de uma sessão com o Chrome aberto e autenticado — o Cloudflare Turnstile exige clique humano):
-
-1. `npm run abrir-chrome`, clicar em "Confirme que é humano", fazer login
-2. Navegar até **Histórico > Publicações por Data** e deixar a janela aberta
-3. `npm run inspecionar` e usar o comando `dump` em cada tela para listar os elementos
-4. Preencher `SEL` em `src/sources/portal.js`, preferindo texto visível (`getByRole`, `getByText`) a ID do ASP.NET — texto sobrevive melhor a redesenho
-5. Implementar `irParaPublicacoesPorData()`
-6. Ligar `PORTAL=1` e rodar `npm run dry` conferindo o print salvo em `out/<data>/portal.png`
-
-**Custo operacional depois de pronto:** a janela do Chrome precisa estar aberta e com sessão viva às 14h, todo dia. Se não estiver, o portal falha, o aviso sai no WhatsApp e o dia fica em aberto para os retries — a automação não quebra, mas aquele dia sai só com o DJEN.
-
-**Pendência menor dentro desta:** `SEL.proximaPagina` também está `TODO`. Sem ele o robô lê só a primeira página (10 resultados). Isso **não passa em silêncio** — a divergência contra o resumo do dia vira aviso em destaque e marca o dia como incompleto —, mas até fechar esse seletor todo dia com mais de 10 publicações no portal vai gerar aviso.
+**Fica um limite:** o portal corta o texto da intimação em ~986 caracteres. Quando a publicação também vem da API, o texto inteiro dela é usado. Quando **só** existe no portal, o que sai é a prévia cortada — ver `docs/MELHORIAS.md`.
 
 ---
 
@@ -78,16 +54,11 @@ Se a opção "Senhas de app" não aparecer, quase sempre é porque a verificaç�
 
 ---
 
-## 4. O agendador nunca executou de verdade
+## ~~4. O agendador nunca executou~~ — CONFERIDO em 12/08/2026
 
-**Estado:** as três tarefas existem e estão `Ready`, apontando para `D:\oab-pubs` (junction válida), com `node.exe` e argumentos corretos. Mas `LastRunTime` = 1999 e resultado `267011` = "ainda não executou".
+Rodou às 14:00:00 com resultado `0`. Coletou, viu que as 5 publicações do dia já tinham saído na execução da madrugada e terminou sem enviar nada — correto. O registro do dia migrou para o formato novo (`completo`, `canaisEntregues`) e `lastError` ficou `null`.
 
-**O que fazer:** só conferir, depois das 14h:
-
-- chegou mensagem no WhatsApp (ou não, se não havia publicação nova — o que também é correto)
-- `state.json` ganhou os campos `completo` e `canaisEntregues` no dia
-- `logs/` tem o registro da execução
-- `state.json` → `lastError` está `null`
+**O que ficou faltando conferir:** uma execução em que haja o que enviar. E agora, com o portal ligado, a primeira execução real vai passar pelo Chrome — se a janela não estiver aberta às 14h, é aí que aparece o aviso de fonte indisponível.
 
 ---
 

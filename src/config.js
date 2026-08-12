@@ -104,6 +104,9 @@ export const config = {
   urls: {
     login:
       'https://www2.oabsp.org.br/asp/dotnet/LoginSite/LoginMain.aspx?ReturnUrl=%2fasp%2fdotnet%2fLoginSite%2fAcessoRestrito%2fgateway.aspx%3fop%3d1&op=1',
+    // "Historico > Publicacoes por Data". Endereco proprio e estavel: o robo
+    // vai direto, em vez de percorrer o menu e depender de mais seletores.
+    publicacoes: 'https://recortedigital.oabsp.org.br/Historico/historicodata.aspx',
   },
 
   paths: {
