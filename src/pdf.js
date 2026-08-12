@@ -3,6 +3,7 @@ import path from 'node:path';
 import PDFDocument from 'pdfkit';
 import { config, brToISO } from './config.js';
 import { formatarPartes } from './merge.js';
+import { calcularPrazo } from './prazo.js';
 
 /** "1637" — hora local, para desempatar nomes de arquivo no mesmo dia. */
 function horaHHmm() {
@@ -14,6 +15,70 @@ function horaHHmm() {
   })
     .format(new Date())
     .replace(/\D/g, '');
+}
+
+/**
+ * Bloco de datas da publicacao: disponibilizacao -> publicacao -> inicio ->
+ * vencimento. Vem depois dos campos comuns e antes do texto da intimacao, que e
+ * a ordem em que se le a publicacao para decidir o que fazer com ela.
+ *
+ * Sai em bloco proprio (e nao como mais duas linhas na lista) porque uma data
+ * calculada por nos nao pode ter a mesma aparencia de um campo que veio da
+ * fonte: as calculadas dizem de onde vieram, e o vencimento leva a ressalva.
+ */
+function escreverPrazo(doc, pub) {
+  const p = calcularPrazo(pub);
+  if (!p) return;
+
+  doc.moveDown(0.5);
+  doc.font('Helvetica-Bold').fontSize(10).text('Prazo');
+  doc.fontSize(9);
+
+  const linha = (rotulo, valor, nota) => {
+    doc.font('Helvetica-Bold').text(`  ${rotulo}: `, { continued: true });
+    doc.font('Helvetica').text(valor, { continued: Boolean(nota) });
+    if (nota) doc.fillColor('#666').text(`  ${nota}`).fillColor('black');
+  };
+
+  linha('Disponibilização', pub.dataDisponibilizacao);
+  linha(
+    'Publicação',
+    p.publicacao,
+    p.publicacaoInformada ? '(informada pela fonte)' : '(1º dia útil seguinte — art. 224, §2º)',
+  );
+  linha('Contagem começa', p.inicio, '(1º dia útil após a publicação)');
+
+  const ressalva = (texto) => {
+    doc.font('Helvetica').fillColor('#666').fontSize(8).text(`  ${texto}`);
+    doc.fillColor('black').fontSize(9);
+  };
+
+  if (p.fatal) {
+    doc.moveDown(0.2);
+    doc.font('Helvetica-Bold').fillColor('#b00020');
+    doc.text(`  Vence em ${p.fatal} — ${p.quantidade} dias ${p.tipo === 'corridos' ? 'corridos' : 'úteis'}`);
+    ressalva(
+      'Estimativa. Não inclui feriado estadual/municipal/forense, suspensão do tribunal' +
+        ' nem prazo em dobro. Confira no processo.',
+    );
+  } else if (p.unidade === 'horas') {
+    doc.moveDown(0.2);
+    doc.font('Helvetica-Bold').fillColor('#b00020');
+    doc.text(`  Prazo de ${p.quantidade} horas`);
+    ressalva('Contado em horas a partir da intimação — sem data calculada aqui. Confira no processo.');
+  } else if (p.citados.length > 1) {
+    // Nao calcula vencimento aqui de proposito: com mais de um prazo no texto,
+    // qualquer escolha nossa seria chute (ver a nota em calcularPrazo).
+    doc.moveDown(0.2);
+    doc.font('Helvetica-Bold').fillColor('#8a6d00');
+    doc.text(`  O texto cita ${p.citados.length} prazos: ${p.citados.map((c) => `${c.quantidade} ${c.unidade}`).join(', ')}`);
+    ressalva(
+      'Sem vencimento calculado: mais de um prazo no mesmo ato, e podem ser de partes' +
+        ' diferentes (perito, Ministério Público) ou depender de evento futuro. Confira no processo.',
+    );
+  } else {
+    ressalva('O texto da intimação não declara prazo — verifique o ato.');
+  }
 }
 
 /**
@@ -80,8 +145,6 @@ export function gerarPDF({ dataBR, publicacoes, avisos = [], complemento = false
       ['Tribunal', pub.tribunal],
       ['Jornal', pub.jornal],
       ['Caderno', pub.caderno],
-      ['Disponibilização', pub.dataDisponibilizacao],
-      ['Publicação', pub.dataPublicacao],
       ['Página', pub.pagina],
     ];
 
@@ -91,6 +154,8 @@ export function gerarPDF({ dataBR, publicacoes, avisos = [], complemento = false
       doc.font('Helvetica-Bold').text(`${rotulo}: `, { continued: true });
       doc.font('Helvetica').text(valor);
     }
+
+    escreverPrazo(doc, pub);
 
     doc.moveDown(0.8);
     doc.font('Helvetica-Bold').fontSize(11).text('Intimação');

@@ -72,6 +72,24 @@ export const config = {
     return new Set(lista);
   },
 
+  // Varre as variantes de sufixo da inscricao (123456-O, -A, ...) em TODA
+  // execucao. Custa 6 consultas extras e o risco de HTTP 429 na API do CNJ, e
+  // nesta inscricao nenhuma delas devolveu nada — por isso o padrao e desligado
+  // e a varredura acontece so quando a base vem vazia (ver src/sources/cnj.js).
+  // Ligue por uns dias se suspeitar que ha publicacao gravada com sufixo.
+  varrerVariantesOab: process.env.VARIANTES_OAB === '1' || process.argv.includes('--variantes'),
+
+  // Feriados que a conta de prazo nao tem como saber sozinha: estaduais,
+  // municipais e forenses (Dia da Justica, aniversario da comarca, portaria de
+  // suspensao). dd/mm/aaaa separados por virgula. Sem isso, um prazo estimado
+  // pode cair um dia adiantado — e o aviso de "estimativa" existe por isso.
+  get feriadosExtra() {
+    return (process.env.FERIADOS_EXTRA || '')
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean);
+  },
+
   timezone: process.env.TZ_APP || 'America/Sao_Paulo',
   // Nao existe modo headless: o portal so e acessado pela janela de Chrome que
   // o usuario abre e autentica (ver src/browser.js).

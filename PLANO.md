@@ -209,11 +209,31 @@ Primeiro lugar pra olhar: **`state.json`**, campo `lastError` — tem o horário
 
 ---
 
+## Contagem de prazo
+
+Cada publicação sai no WhatsApp e no PDF com as datas calculadas a partir da disponibilização, seguindo o CPC:
+
+| Etapa | Regra |
+|---|---|
+| Disponibilização | o dia em que o ato apareceu no DJe (vem da fonte) |
+| Publicação | primeiro dia útil seguinte — art. 224, §2º |
+| Contagem começa | primeiro dia útil após a publicação |
+| Vencimento | contado em dias úteis, pulando feriado e recesso |
+
+Feriados: nacionais fixos, mais os móveis derivados da Páscoa (carnaval, Sexta-feira Santa, Corpus Christi) pelo algoritmo de Meeus, mais o **recesso de 20/12 a 20/01** (art. 220). Feriado estadual, municipal ou forense entra à mão em `FERIADOS_EXTRA` no `.env` — não há fonte offline confiável para eles.
+
+**O vencimento só é calculado quando o texto declara um único prazo.** Quando o ato cita vários, o robô lista os prazos e não arrisca data. Isso não é excesso de cautela: o DESPACHO de 12/08/2026 no processo 4047179-45.2026.8.26.0002 cita quatro prazos — cinco dias e trinta dias do *perito*, dez dias para os *esclarecimentos dele*, e quinze dias das partes que só correm **depois da entrega do laudo**. Nenhum era do advogado naquele dia. Uma versão anterior escolhia o menor e teria estampado "vence 20/08/2026", data de ninguém. Data falsa gasta a confiança no aviso, e no dia em que o vencimento for verdadeiro ele vai parecer mais um palpite.
+
+O que a conta **não** sabe, e por isso todo vencimento sai marcado como estimativa: feriado local, suspensão do tribunal, prazo em dobro (Fazenda, DP, litisconsortes) e de quem é o prazo. `npm run teste` roda as 51 verificações dessa lógica.
+
+---
+
 ## Limites conhecidos (e assumidos)
 
 - **PC desligado às 14h = risco de perder o dia**, já que a janela é "somente hoje". O "executar se perdida" cobre o caso de você ligar mais tarde no mesmo dia, mas não cobre o PC ficar desligado o dia inteiro.
 - **`whatsapp-web.js` é não-oficial.** Se o WhatsApp derrubar a sessão, precisa reescanear o QR. Por isso e-mail e zap são independentes: **falha no zap nunca impede o e-mail de sair**. O e-mail é a fonte da verdade.
 - **A Cloudflare pode endurecer** e passar a exigir CAPTCHA interativo. Aí a automação para e avisa — que é melhor do que falhar em silêncio.
+- **A API do CNJ limita requisição sem documentar o limite.** Sete consultas em rajada (uma por variante de sufixo da OAB) tomam HTTP 429 na hora, e com o portal desligado o CNJ é a única fonte — 429 não custa "menos publicações", custa o dia. Por isso a varredura de variantes é sob demanda, e há espera crescente em 429/5xx.
 - **O portal pode mudar de layout.** Os seletores preferem texto visível ("Consultar", "Visualizar tudo") em vez de IDs internos, justamente porque texto sobrevive melhor a redesenho. Ainda assim, mudança grande = ajuste necessário.
 
 ---

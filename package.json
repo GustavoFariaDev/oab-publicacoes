@@ -10,6 +10,7 @@
   "scripts": {
     "once": "node src/index.js",
     "dry": "node src/index.js --dry",
+    "teste": "node teste/prazo.mjs",
     "inspecionar": "node scripts/inspecionar.js",
     "setup:whatsapp": "node scripts/setup-whatsapp.js",
     "register-task": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/register-task.ps1",

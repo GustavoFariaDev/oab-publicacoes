@@ -3,6 +3,7 @@ import path from 'node:path';
 import pkg from 'whatsapp-web.js';
 import { config } from './config.js';
 import { formatarPartes } from './merge.js';
+import { resumirPrazo } from './prazo.js';
 import { log } from './log.js';
 
 const { Client, LocalAuth, MessageMedia } = pkg;
@@ -79,14 +80,17 @@ export function montarResumo({ dataBR, publicacoes, avisos = [], complemento = f
     return `*OAB ${config.oab.numero}* — ${dataBR}\n\nNenhuma publicação hoje.`;
   }
 
+  const prazos = publicacoes.map(resumirPrazo);
   const itens = publicacoes
     .map((p, i) => {
       const linhas = [`*${i + 1}. ${p.titulo || 'Publicação'}*`];
       if (p.numeroProcesso) linhas.push(`Processo: ${p.numeroProcesso}`);
       linhas.push(...formatarPartes(p.partes));
       if (p.vara) linhas.push(p.vara);
-      const prazo = p.intimacao?.match(/prazo de (\d+)\s*\(?[^)]*\)?\s*dias?/i);
-      if (prazo) linhas.push(`⏳ Prazo: ${prazo[1]} dias`);
+      // Antes daqui saia so "Prazo: 15 dias", o numero cru do texto. Sozinho
+      // ele nao diz nada de util: o que decide a agenda e a DATA em que vence,
+      // contada em dias uteis a partir do primeiro dia util apos a publicacao.
+      if (prazos[i]) linhas.push(prazos[i]);
       return linhas.join('\n');
     })
     .join('\n\n');
@@ -95,7 +99,14 @@ export function montarResumo({ dataBR, publicacoes, avisos = [], complemento = f
   const cabecalho = complemento
     ? `_complemento_ — +${publicacoes.length} publicação(ões)`
     : `${publicacoes.length} publicação(ões)`;
-  return `${alerta}*OAB ${config.oab.numero}* — ${dataBR}\n${cabecalho}\n\n${itens}`;
+  // O rodape do vencimento nao e formalidade: a conta nao conhece feriado
+  // municipal/forense nem prazo em dobro, e uma data estimada mais tarde que a
+  // real faz perder prazo. Fica no fim, uma vez, em vez de repetir por item.
+  const rodape = prazos.some((linha) => linha?.includes('vence'))
+    ? '\n\n_Vencimentos são estimativa (dias úteis, art. 224 e 220 do CPC). ' +
+      'Não incluem feriado local/forense nem prazo em dobro — confira no processo._'
+    : '';
+  return `${alerta}*OAB ${config.oab.numero}* — ${dataBR}\n${cabecalho}\n\n${itens}${rodape}`;
 }
 
 /**
