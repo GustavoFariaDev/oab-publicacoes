@@ -215,10 +215,16 @@ async function consultarVariante({ oab, ufOab, dataISO }) {
   return { itens, completo: itens.length >= (declarado ?? 0) };
 }
 
-/** Entidades HTML que aparecem de fato no texto dos tribunais. */
+/**
+ * Entidades HTML que aparecem de fato no texto dos tribunais.
+ * O que nao estiver aqui passa cru ("&rsquo;") em vez de sumir — feio, mas
+ * visivel, que e melhor do que perder um pedaco do texto da intimacao.
+ */
 const ENTIDADES = {
   nbsp: ' ', amp: '&', lt: '<', gt: '>', quot: '"', apos: "'", ordm: 'º', ordf: 'ª',
   sect: '§', deg: '°', hellip: '…', mdash: '—', ndash: '–', laquo: '«', raquo: '»',
+  rsquo: '’', lsquo: '‘', ldquo: '“', rdquo: '”', bull: '•', middot: '·', times: '×',
+  uuml: 'ü', Uuml: 'Ü', ntilde: 'ñ', Ntilde: 'Ñ', copy: '©', reg: '®', euro: '€',
   aacute: 'á', agrave: 'à', atilde: 'ã', acirc: 'â', eacute: 'é', ecirc: 'ê',
   iacute: 'í', oacute: 'ó', otilde: 'õ', ocirc: 'ô', uacute: 'ú', ccedil: 'ç',
   Aacute: 'Á', Agrave: 'À', Atilde: 'Ã', Acirc: 'Â', Eacute: 'É', Ecirc: 'Ê',

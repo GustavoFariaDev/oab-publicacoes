@@ -1,5 +1,6 @@
 import { calcularPrazo, diaUtilSeguinte, deBR, paraBR, ehDiaUtil, prazosDeclarados, resumirPrazo } from '../src/prazo.js';
 import { htmlParaTexto } from '../src/sources/cnj.js';
+import { escreverPrazo } from '../src/pdf.js';
 
 let ok = 0;
 let mal = 0;
@@ -94,10 +95,33 @@ eq('resumo de horas nao diz vence', resumirPrazo({ dataDisponibilizacao: '12/08/
 // --- Numero absurdo e ignorado ---
 eq('ignora 999 dias', prazosDeclarados('prazo de 999 dias').length, 0);
 
+// --- FALSO POSITIVO: "em" no fim de verbo nao pode virar prazo ---
+eq('"manifestem 5 dias" nao e prazo', prazosDeclarados('para que se manifestem 5 dias apos').length, 0);
+eq('"totalizem 30 dias" nao e prazo', prazosDeclarados('que totalizem 30 dias de atraso').length, 0);
+eq('mas "em 5 dias" continua sendo', prazosDeclarados('manifeste-se em 5 dias').length, 1);
+eq('le "Prazo 15 dias" sem o "de"', prazosDeclarados('Prazo 15 (quinze) dias sob pena')[0]?.quantidade, 15);
+eq('le "prazos de 15 dias" no plural', prazosDeclarados('os prazos de 15 dias')[0]?.quantidade, 15);
+
+// --- Mesmo numero com contagem diferente sao DOIS prazos ---
+const p10 = calcularPrazo({
+  dataDisponibilizacao: '12/08/2026',
+  intimacao: 'no prazo de 15 dias úteis ... e no prazo de 15 dias corridos',
+});
+eq('uteis e corridos nao se fundem', p10.citados.length, 2);
+eq('e por isso nao calcula data', p10.fatal, null);
+// Repetido de verdade (mesmo tipo) continua sendo um so:
+eq(
+  'mesmo prazo repetido continua um',
+  calcularPrazo({ dataDisponibilizacao: '12/08/2026', intimacao: 'prazo de 15 dias ... prazo de 15 dias' }).fatal,
+  '03/09/2026',
+);
+
 // --- Data invalida nao explode ---
 eq('data vazia -> null', calcularPrazo({ dataDisponibilizacao: '' }), null);
 eq('data impossivel -> null', calcularPrazo({ dataDisponibilizacao: '31/02/2026' }), null);
-eq('formato ISO nao passa por BR', calcularPrazo({ dataDisponibilizacao: '2026-08-12' }), null);
+eq('formato ISO tambem e aceito', calcularPrazo({ dataDisponibilizacao: '2026-08-12' })?.inicio, '14/08/2026');
+eq('ISO impossivel -> null', calcularPrazo({ dataDisponibilizacao: '2026-02-31' }), null);
+eq('texto qualquer -> null', calcularPrazo({ dataDisponibilizacao: 'ontem' }), null);
 
 // --- HTML do DJEN vira texto legivel ---
 const html = 'e quesitos e indica&ccedil;&atilde;o de assistente t&eacute;cnico, no prazo legal (art. 465, &sect; 1&ordm;, do CPC). <strong>O peticionamento</strong><p>outro par&aacute;grafo</p>';
@@ -108,6 +132,55 @@ eq('remove tags', /<[^>]+>/.test(texto), false);
 eq('paragrafo vira quebra', texto.includes('\n'), true);
 eq('script sai inteiro', htmlParaTexto('a<script>alert(1)</script>b'), 'a b');
 eq('prazo e lido depois de decodificar', prazosDeclarados(htmlParaTexto('no prazo de 15 (quinze) dias&nbsp;&uacute;teis'))[0]?.tipo, 'uteis');
+
+// --- Bloco de prazo do PDF ---
+// "doc" de mentira: anota o texto escrito e ignora fonte/cor/posicao.
+function docFalso() {
+  const escrito = [];
+  const doc = new Proxy(
+    {
+      text(t) {
+        escrito.push(String(t));
+        return doc;
+      },
+    },
+    { get: (alvo, prop) => (prop in alvo ? alvo[prop] : () => doc) },
+  );
+  return { doc, texto: () => escrito.join(' ') };
+}
+
+const bloco = (pub) => {
+  const { doc, texto } = docFalso();
+  escreverPrazo(doc, pub);
+  return texto();
+};
+
+const t1 = bloco({ dataDisponibilizacao: '12/08/2026', intimacao: 'no prazo de 15 dias' });
+eq('PDF: mostra disponibilizacao', t1.includes('12/08/2026'), true);
+eq('PDF: mostra publicacao calculada', t1.includes('13/08/2026'), true);
+eq('PDF: mostra inicio da contagem', t1.includes('14/08/2026'), true);
+eq('PDF: mostra vencimento', t1.includes('Vence em 03/09/2026'), true);
+eq('PDF: vencimento sai com ressalva', t1.includes('Estimativa'), true);
+
+// A regressao que motivou este teste: com a data ilegivel, o bloco inteiro
+// desaparecia — e junto com ele as datas que a FONTE tinha informado.
+const t2 = bloco({ dataDisponibilizacao: 'ontem', dataPublicacao: '13/08/2026', intimacao: 'prazo de 15 dias' });
+eq('PDF: data ilegivel nao apaga a data da fonte', t2.includes('ontem'), true);
+eq('PDF: data ilegivel mantem a publicacao informada', t2.includes('13/08/2026'), true);
+eq('PDF: data ilegivel explica a ausencia da contagem', t2.includes('não foi reconhecida'), true);
+eq('PDF: data ilegivel nao inventa vencimento', t2.includes('Vence em'), false);
+
+const t3 = bloco({ dataDisponibilizacao: '12/08/2026', intimacao: 'em cinco dias ... em trinta dias' });
+eq('PDF: varios prazos nao viram vencimento', t3.includes('Vence em'), false);
+eq('PDF: varios prazos sao listados', t3.includes('2 prazos'), true);
+
+const t4 = bloco({ dataDisponibilizacao: '12/08/2026', intimacao: 'no prazo de 48 horas' });
+eq('PDF: horas nao viram vencimento', t4.includes('Vence em'), false);
+eq('PDF: horas aparecem', t4.includes('48 horas'), true);
+
+const t5 = bloco({ dataDisponibilizacao: '12/08/2026' });
+eq('PDF: sem intimacao ainda mostra a contagem', t5.includes('14/08/2026'), true);
+eq('PDF: sem intimacao avisa que nao ha prazo', t5.includes('não declara prazo'), true);
 
 console.log(`\n${ok} ok, ${mal} falha(s)`);
 process.exitCode = mal ? 1 : 0;

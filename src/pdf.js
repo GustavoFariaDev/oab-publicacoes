@@ -25,20 +25,36 @@ function horaHHmm() {
  * Sai em bloco proprio (e nao como mais duas linhas na lista) porque uma data
  * calculada por nos nao pode ter a mesma aparencia de um campo que veio da
  * fonte: as calculadas dizem de onde vieram, e o vencimento leva a ressalva.
+ *
+ * Exportada para teste: e o bloco onde um erro vira prazo perdido, e conferir
+ * o texto dele por dentro de um PDF ja gerado e caro demais para se fazer
+ * sempre. O teste passa um "doc" de mentira que so anota o que foi escrito.
  */
-function escreverPrazo(doc, pub) {
+export function escreverPrazo(doc, pub) {
   const p = calcularPrazo(pub);
-  if (!p) return;
 
   doc.moveDown(0.5);
   doc.font('Helvetica-Bold').fontSize(10).text('Prazo');
   doc.fontSize(9);
 
   const linha = (rotulo, valor, nota) => {
+    if (!valor) return;
     doc.font('Helvetica-Bold').text(`  ${rotulo}: `, { continued: true });
     doc.font('Helvetica').text(valor, { continued: Boolean(nota) });
     if (nota) doc.fillColor('#666').text(`  ${nota}`).fillColor('black');
   };
+
+  // Data ilegivel nao pode APAGAR a data: as duas datas da fonte saem cruas e o
+  // resto do bloco nao existe. Quando estes campos moraram na lista de cima,
+  // este caminho era so nao imprimir o bloco; agora seria perder o dado.
+  if (!p) {
+    linha('Disponibilização', pub.dataDisponibilizacao);
+    linha('Publicação', pub.dataPublicacao);
+    doc.font('Helvetica').fillColor('#666').fontSize(8);
+    doc.text('  Sem contagem: a data de disponibilização não foi reconhecida.');
+    doc.fillColor('black').fontSize(9);
+    return;
+  }
 
   linha('Disponibilização', pub.dataDisponibilizacao);
   linha(

@@ -102,8 +102,11 @@ export function montarResumo({ dataBR, publicacoes, avisos = [], complemento = f
   // O rodape do vencimento nao e formalidade: a conta nao conhece feriado
   // municipal/forense nem prazo em dobro, e uma data estimada mais tarde que a
   // real faz perder prazo. Fica no fim, uma vez, em vez de repetir por item.
-  const rodape = prazos.some((linha) => linha?.includes('vence'))
-    ? '\n\n_Vencimentos são estimativa (dias úteis, art. 224 e 220 do CPC). ' +
+  //
+  // Vale para QUALQUER linha de prazo, nao so as que dizem "vence": o "contagem
+  // começa" tambem e data calculada por nos, e depende dos mesmos feriados.
+  const rodape = prazos.some(Boolean)
+    ? '\n\n_Datas de prazo são estimativa (dias úteis, art. 224 e 220 do CPC). ' +
       'Não incluem feriado local/forense nem prazo em dobro — confira no processo._'
     : '';
   return `${alerta}*OAB ${config.oab.numero}* — ${dataBR}\n${cabecalho}\n\n${itens}${rodape}`;

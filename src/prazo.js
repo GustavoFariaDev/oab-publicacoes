@@ -40,11 +40,21 @@ function utc(ano, mes, dia) {
 const chave = (d) => d.toISOString().slice(0, 10);
 const somarDias = (d, n) => new Date(d.getTime() + n * 86400000);
 
-/** "12/08/2026" -> Date; null se nao for uma data valida. */
-export function deBR(br = '') {
-  const m = String(br).match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
-  if (!m) return null;
-  const [, dd, mm, yyyy] = m;
+/**
+ * "12/08/2026" -> Date; null se nao for uma data valida.
+ *
+ * Aceita tambem "2026-08-12": a API do CNJ fala ISO nos parametros de consulta,
+ * e um dia pode passar a devolver ISO no corpo. Sem isso, a data viraria null,
+ * o bloco de prazo sumiria e ninguem saberia por que — enquanto ISO e formato
+ * sem ambiguidade nenhuma, dd/mm ou mm/dd nao entra aqui de graca.
+ */
+export function deBR(data = '') {
+  const texto = String(data).trim();
+  const br = texto.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+  const iso = texto.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!br && !iso) return null;
+
+  const [dd, mm, yyyy] = br ? [br[1], br[2], br[3]] : [iso[3], iso[2], iso[1]];
   const d = utc(Number(yyyy), Number(mm), Number(dd));
   // Rejeita 31/02: o Date rola para marco e o dia deixa de bater.
   return d.getUTCDate() === Number(dd) && d.getUTCMonth() === Number(mm) - 1 ? d : null;
@@ -165,8 +175,12 @@ export function prazosDeclarados(texto = '') {
   const achados = [];
   const re = new RegExp(
     // "prazo de 15 (quinze) dias uteis", "prazo de quinze dias", "em dez dias",
-    // "no prazo de 48 horas", "prazo sucessivo de 5 dias"
-    String.raw`(?:prazo\s+(?:sucessivo\s+)?(?:de\s+|em\s+)?|em\s+|dentro\s+de\s+)` +
+    // "no prazo de 48 horas", "prazo sucessivo de 5 dias", "Prazo 15 dias"
+    //
+    // O \b inicial nao e enfeite: sem ele, o "em" final de qualquer verbo serve
+    // de gatilho — "manifestem 5 dias" e "totalizem 30 dias de atraso" viravam
+    // prazo do nada.
+    String.raw`\b(?:prazos?\s+(?:sucessivo\s+)?(?:de\s+|em\s+)?|em\s+|dentro\s+de\s+)` +
       String.raw`(\d{1,3}|${UNIDADES})\s*` +
       String.raw`(?:\([^)]{0,30}\)\s*)?` +
       String.raw`(dias?|horas?)` +
@@ -231,8 +245,11 @@ export function calcularPrazo(pub) {
   const declarados = prazosDeclarados(pub.intimacao);
   // Distintos: o mesmo prazo repetido no texto ("no prazo de 15 dias" citado
   // duas vezes) continua sendo UM prazo, e nao deve cair na regra da ambiguidade.
+  // O tipo entra na chave: "15 dias uteis" e "15 dias corridos" sao prazos
+  // DIFERENTES e terminam em datas diferentes — fundir os dois faria a contagem
+  // sair pelo tipo de quem apareceu primeiro, sem ninguem notar.
   const distintos = [
-    ...new Map(declarados.map((p) => [`${p.quantidade}|${p.unidade}`, p])).values(),
+    ...new Map(declarados.map((p) => [`${p.quantidade}|${p.unidade}|${p.tipo}`, p])).values(),
   ];
   const unico = distintos.length === 1 ? distintos[0] : null;
 
