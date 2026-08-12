@@ -106,6 +106,8 @@ Flags: `--dry`, `--data=dd/mm/aaaa`, `--retry` (no-op se o dia já está resolvi
 - [ ] **Portal da OAB** — seletores da tela de publicações ainda por mapear (`TODO(fase-1)` em `src/sources/portal.js`)
 - [ ] **E-mail** — depende de uma Senha de app do Google; enquanto não existir, `CANAIS=whatsapp` mantém a automação de pé
 
+Detalhes e prioridade em **[docs/PENDENCIAS.md](docs/PENDENCIAS.md)**.
+
 ## Limites conhecidos
 
 - **O robô não sabe de quem é o prazo.** A regra do prazo único evita o caso ruidoso, mas um ato com prazo único dirigido ao perito ainda sai como se fosse seu. Só leitura humana resolve.
@@ -124,4 +126,10 @@ Credenciais e sessões **nunca** entram no repositório — o `.gitignore` cobre
 
 ---
 
-Documentação completa, decisões de projeto e diagnóstico de falhas: **[PLANO.md](PLANO.md)**.
+## Documentação
+
+| Documento | O que tem |
+|---|---|
+| **[PLANO.md](PLANO.md)** | Decisões de projeto, instalação detalhada, agendamento e diagnóstico de falhas |
+| **[docs/PENDENCIAS.md](docs/PENDENCIAS.md)** | O que falta para funcionar 100%, em ordem de prioridade |
+| **[docs/MELHORIAS.md](docs/MELHORIAS.md)** | Ideias com ganho, custo e risco — nada prometido |
