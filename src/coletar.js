@@ -26,10 +26,18 @@ export async function coletar(dataBR) {
 
   // --- Fonte 1: API do CNJ (DJEN) ---
   try {
-    porFonte.CNJ = await buscarNoCNJ(dataBR, {
+    const cnj = await buscarNoCNJ(dataBR, {
       numeroOab: config.oab.numero,
       ufOab: config.oab.uf,
     });
+    porFonte.CNJ = cnj.publicacoes;
+    if (!cnj.completo) {
+      completo = false;
+      avisos.push(
+        `FONTE INCOMPLETA: a API do CNJ declarou mais publicações do que entregou. ` +
+          `Pode estar faltando publicação — o retry tenta de novo.`,
+      );
+    }
   } catch (e) {
     porFonte.CNJ = [];
     falhas.push('CNJ');
@@ -45,6 +53,19 @@ export async function coletar(dataBR) {
       porFonte.Portal = portal.publicacoes;
       avisos.push(...portal.avisos);
       if (!portal.completo) completo = false;
+
+      // Portal "genuinamente vazio" (esperado === 0) e sucesso, mas se o CNJ
+      // achou publicacao pra esse mesmo dia, um portal zerado cheira mais a
+      // filtro de data errado (dd/m/aaaa vs dd/mm/aaaa, por exemplo) do que a
+      // coincidencia. Nao da pra ter certeza sem o seletor de paginacao
+      // fechado, entao o retry tenta de novo em vez de aceitar calado.
+      if (portal.publicacoes.length === 0 && porFonte.CNJ.length > 0) {
+        completo = false;
+        avisos.push(
+          'DIVERGÊNCIA NO PORTAL: o portal não retornou nenhuma publicação para o dia, ' +
+            'mas o CNJ encontrou. Pode ser filtro de data incorreto — confira manualmente.',
+        );
+      }
     } catch (e) {
       porFonte.Portal = [];
       falhas.push('Portal');

@@ -36,6 +36,24 @@ async function notificarFalha(stage, error) {
 }
 
 /**
+ * Escreve em lastError o que ainda falta depois de um recordSuccess.
+ *
+ * recordSuccess sempre zera lastError (senao a mensagem de sucesso nao
+ * "ganharia" da de erro anterior) — mas se sobrou pendencia (canal que
+ * falhou, fonte que veio incompleta, ou os dois), o retry das 16h/17h so tem
+ * esse campo pra saber o motivo, porque a tarefa roda sem terminal. Uma
+ * chamada so, juntando os dois motivos: chamar recordError duas vezes faria
+ * a segunda apagar a primeira, ja que e um slot so.
+ */
+function registrarPendencias(coleta, falhasCanal) {
+  const problemas = falhasCanal.map(([canal, e]) => `canal ${canal}: ${e.message}`);
+  if (!coleta.completo) problemas.push(`fonte incompleta: ${coleta.avisos.join(' | ')}`);
+  if (problemas.length) {
+    recordError('coleta', new Error(problemas.join(' | ')));
+  }
+}
+
+/**
  * Orquestrador: scrape -> PDF -> e-mail -> WhatsApp -> estado.
  *
  * Flags:
@@ -94,6 +112,7 @@ async function main() {
         completo: coleta.completo,
         entregues,
       });
+      registrarPendencias(coleta, []);
       return;
     }
     if (novas.length < publicacoes.length) {
@@ -168,7 +187,7 @@ async function main() {
       completo: coleta.completo,
       entregues,
     });
-    for (const [canal, e] of falhas) recordError(canal, e);
+    registrarPendencias(coleta, falhas);
 
     const restantes = canais.filter((c) => !entregues.has(c));
     if (restantes.length) {

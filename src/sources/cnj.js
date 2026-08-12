@@ -23,7 +23,10 @@ export function normalizarProcesso(numero = '') {
  * Busca as comunicacoes de um dia.
  * @param {string} dataBR  dd/mm/aaaa
  * @param {{numeroOab: string, ufOab: string}} oab
- * @returns {Promise<import('../merge.js').Publicacao[]>}
+ * @returns {Promise<{publicacoes: import('../merge.js').Publicacao[], completo: boolean}>}
+ *   `completo` e false quando a API entregou menos itens do que ela mesma
+ *   declarou (corpo.count) — o dia continua em aberto para o retry, do mesmo
+ *   jeito que o guard-rail do portal em src/sources/portal.js.
  */
 export async function buscarNoCNJ(dataBR, { numeroOab, ufOab }) {
   const dataISO = brToISO(dataBR);
@@ -57,12 +60,13 @@ export async function buscarNoCNJ(dataBR, { numeroOab, ufOab }) {
     if (pagina > 50) throw new Error('Paginacao do CNJ nao terminou — abortando por seguranca.');
   }
 
-  if (todas.length !== declarado) {
+  const completo = todas.length >= (declarado ?? todas.length);
+  if (!completo) {
     log.warn(`CNJ: declarou ${declarado} mas entregou ${todas.length}.`);
   }
   log.info(`CNJ: ${todas.length} comunicacao(oes) em ${dataBR}.`);
 
-  return todas.map(paraPublicacao);
+  return { publicacoes: todas.map(paraPublicacao), completo };
 }
 
 /** Converte o item da API para o formato comum das duas fontes. */

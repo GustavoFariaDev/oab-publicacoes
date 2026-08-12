@@ -21,11 +21,32 @@ function save(state) {
 }
 
 /**
- * Identificador estavel de uma publicacao, para nao enviar a mesma duas vezes.
- * Prefere o "Identificador do documento" do portal; cai para processo+data.
+ * TODOS os identificadores conhecidos de uma publicacao, para nao enviar a
+ * mesma duas vezes mesmo quando o merge muda de forma entre execucoes.
+ *
+ * Uma publicacao que hoje as 14h so tem o CNJ fora do ar sai com o id do
+ * Portal. Se o CNJ volta as 16h, unir() processa as fontes na mesma ordem de
+ * sempre (CNJ primeiro) e o grupo passa a carregar o id do CNJ — o id
+ * top-level muda mesmo sendo a MESMA publicacao. Por isso o id "estavel"
+ * aqui e o conjunto de tudo que ja identificou essa publicacao, nao um
+ * unico valor: basta UM deles bater com o que ja foi enviado.
  */
-export function publicationId(pub) {
-  return pub.identificador || `${pub.numeroProcesso}|${pub.dataDisponibilizacao}`;
+export function publicationIds(pub) {
+  const ids = new Set();
+  for (const id of Object.values(pub.identificadores ?? {})) {
+    if (id) ids.add(id);
+  }
+  if (pub.identificador) ids.add(pub.identificador);
+  // "processo|data" so entra quando NENHUM id de fonte existe. E chave de
+  // GRUPO em merge.js, nao de identidade: duas intimacoes distintas do mesmo
+  // processo no mesmo dia (33004 e 33005, ver a nota em merge.js) cairiam no
+  // mesmo grupo mas tem id proprio cada uma. Adicionar o fallback sempre
+  // faria a segunda parecer "ja enviada" so por compartilhar processo+data
+  // com a primeira.
+  if (ids.size === 0) {
+    ids.add(`${pub.numeroProcesso}|${pub.dataDisponibilizacao}`);
+  }
+  return [...ids];
 }
 
 /** Registro salvo de um dia, ou null se nunca rodou. */
@@ -36,7 +57,7 @@ export function dayRecord(dateISO) {
 /** Publicacoes ainda nao enviadas neste dia. */
 export function filterNew(dateISO, publicacoes) {
   const known = new Set(dayRecord(dateISO)?.ids ?? []);
-  return publicacoes.filter((p) => !known.has(publicationId(p)));
+  return publicacoes.filter((p) => !publicationIds(p).some((id) => known.has(id)));
 }
 
 /**
@@ -60,7 +81,7 @@ export function canaisEntregues(day, canais = config.canais) {
 export function recordSuccess(dateISO, { esperado, extraido, publicacoes, completo, entregues }) {
   const state = load();
   const previous = state.days[dateISO]?.ids ?? [];
-  const ids = [...new Set([...previous, ...publicacoes.map(publicationId)])];
+  const ids = [...new Set([...previous, ...publicacoes.flatMap(publicationIds)])];
   state.days[dateISO] = {
     esperado,
     extraido,
@@ -103,7 +124,12 @@ export function recordError(stage, error) {
 export function isDayComplete(dateISO, canais = config.canais) {
   const day = load().days[dateISO];
   if (!day || !day.enviadoEm) return false;
-  if (day.completo === false) return false;
+  // "!== true", nao "=== false": registros gravados antes deste campo existir
+  // nao tem opiniao sobre a completude das fontes. Ao contrario de
+  // canaisEntregues (onde assumir "entregue" evita reenvio em massa no dia da
+  // troca), aqui o custo de assumir errado e maior — entao a duvida vira UM
+  // retry extra, nao um "provavelmente esta tudo bem".
+  if (day.completo !== true) return false;
   const entregues = canaisEntregues(day, canais);
   if (![...canais].every((c) => entregues.has(c))) return false;
   return day.extraido >= day.esperado;

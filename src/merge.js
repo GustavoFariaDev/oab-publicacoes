@@ -130,11 +130,22 @@ export function unir(porFonte) {
       }
 
       if (!alvo) {
-        grupo.push({ ...pub, fontes: [fonte], _texto: texto });
+        grupo.push({
+          ...pub,
+          fontes: [fonte],
+          _texto: texto,
+          // Guarda o identificador de CADA fonte que contribuiu, nao so da que
+          // criou o grupo. O identificador top-level (pub.identificador) muda
+          // conforme qual fonte chega primeiro nesta execucao (ordem de
+          // Object.entries, e se uma fonte caiu na varredura anterior) — nao e
+          // seguro para dedupe sozinho. Ver publicationIds() em state.js.
+          identificadores: { [fonte]: pub.identificador },
+        });
         continue;
       }
 
       alvo.fontes.push(fonte);
+      alvo.identificadores[fonte] = pub.identificador;
       for (const campo of ['dataPublicacao', 'pagina', 'link', 'tribunal', 'vara', 'caderno']) {
         if (!alvo[campo] && pub[campo]) alvo[campo] = pub[campo];
       }
