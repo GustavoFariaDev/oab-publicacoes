@@ -14,14 +14,38 @@ Mapeado contra a tela real e ligado (`PORTAL=1`). No dia 12/08 o robô passou de
 
 ---
 
-## 2. Canal único — o ponto cego
+## 1. O WhatsApp parou de entregar — e mentia que tinha entregado
+
+**Descoberto em 12/08/2026.** `client.sendMessage()` passou a devolver `undefined`: a promise resolve, o log diz "resumo enviado", o estado marca o dia como entregue — **e nada chega**. É o pior tipo de falha, porque o canal some junto com o aviso de que sumiu.
+
+O mecanismo está no código da própria biblioteca:
+
+```js
+return sentMsg ? new Message(this, sentMsg) : undefined;   // Client.js
+```
+
+O envio dentro da página do WhatsApp Web não produz mensagem e a biblioteca engole isso. `getChats()` e `getChatById()` estouram com erro minificado na mesma sessão — sintomas de injeção quebrada contra o WhatsApp Web atual.
+
+**O que já foi feito:** `enviarConferindo()` em `src/whatsapp.js` agora exige a confirmação de envio e lança erro quando ela não vem. A falha ficou barulhenta: o canal falha, o estado NÃO grava entrega e o dia continua em aberto. O registro falso do dia 12/08 foi apagado do `state.json`.
+
+**O que NÃO resolve:**
+
+- `whatsapp-web.js@1.34.7` é a última publicada (abril/2026) — já estava instalada
+- o `main` do GitHub (commits até julho/2026, incluindo correções de injeção) tem **exatamente o mesmo comportamento** — testado
+
+**Caminhos, do mais barato ao mais caro:**
+
+1. **Re-parear a sessão** (`npm run setup:whatsapp`, novo QR). Barato e vale tentar antes de tudo, mas o sintoma não parece de sessão: a conta autentica, fica `ready` e `getNumberId` funciona.
+2. **Ligar o e-mail** (item 2). É o único canal que não depende de biblioteca não-oficial. Deixou de ser "bom ter" e virou a única entrega possível.
+3. **Trocar de biblioteca** para [Baileys](https://github.com/WhiskeySockets/Baileys) — fala o protocolo direto, sem navegador, e é mantida com mais frequência. Significa reescrever `src/whatsapp.js` e parear de novo.
+
+---
+
+## 2. E-mail desligado — agora é o único caminho
 
 **Estado:** `CANAIS=whatsapp`. `SMTP_PASS` está vazio.
 
-**O que custa:** duas coisas, e a segunda é pior que a primeira.
-
-- Se a sessão do WhatsApp cair, **nada chega**.
-- O aviso de falha também sai só pelo WhatsApp. Ou seja: **se o WhatsApp é a falha, você não é avisado de nada.** Um dia sem mensagem fica indistinguível de um dia sem publicação.
+**O que custa:** com o WhatsApp entregando nada (item 1), **hoje não existe canal de entrega nenhum**. E o aviso de falha sairia pelo mesmo WhatsApp quebrado — um dia sem mensagem é indistinguível de um dia sem publicação.
 
 **O que fazer:** gerar uma **Senha de app** do Google (não é a senha da conta):
 

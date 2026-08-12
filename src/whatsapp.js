@@ -74,6 +74,31 @@ function aguardarReady(client, timeoutMs = 90000) {
   return { promise, cancel };
 }
 
+/**
+ * Envia e CONFERE que saiu.
+ *
+ * whatsapp-web.js devolve um Message quando envia. Em 12/08/2026 ele passou a
+ * devolver `undefined`: a promise resolve, nada e entregue, e quem chamou acha
+ * que deu certo. A biblioteca (1.34.7, publicada em abril/2026) tem a injecao
+ * quebrada contra o WhatsApp Web de agosto — os mesmos sintomas aparecem em
+ * getChats() e getChatById(), que estouram com erro minificado.
+ *
+ * O dia inteiro dependia dessa promise: o estado marcava "entregue" e o retry
+ * das 16h nao voltava. Falha silenciosa em canal de aviso e pior do que canal
+ * nenhum, porque some com o proprio aviso de que falhou.
+ */
+async function enviarConferindo(client, chatId, conteudo, oQue) {
+  const enviada = await client.sendMessage(chatId, conteudo);
+  if (!enviada?.id?._serialized) {
+    throw new Error(
+      `WhatsApp aceitou ${oQue} mas nao devolveu confirmacao de envio — ` +
+        'a mensagem NAO saiu. Provavel incompatibilidade do whatsapp-web.js ' +
+        'com a versao atual do WhatsApp Web.',
+    );
+  }
+  return enviada;
+}
+
 /** Resumo curto — o que cabe na tela do celular. O inteiro teor vai no PDF. */
 export function montarResumo({ dataBR, publicacoes, avisos = [], complemento = false }) {
   if (publicacoes.length === 0) {
@@ -139,12 +164,17 @@ export async function enviarWhatsApp({
     }
     const chatId = numberId._serialized;
 
-    await client.sendMessage(chatId, montarResumo({ dataBR, publicacoes, avisos, complemento }));
+    await enviarConferindo(
+      client,
+      chatId,
+      montarResumo({ dataBR, publicacoes, avisos, complemento }),
+      'o resumo',
+    );
     log.info('WhatsApp: resumo enviado.');
 
     if (pdfPath && fs.existsSync(pdfPath)) {
       try {
-        await client.sendMessage(chatId, MessageMedia.fromFilePath(pdfPath));
+        await enviarConferindo(client, chatId, MessageMedia.fromFilePath(pdfPath), 'o PDF');
         log.info('WhatsApp: PDF enviado.');
       } catch (e) {
         log.warn('WhatsApp: falhou o anexo do PDF —', e.message);
@@ -182,13 +212,15 @@ export async function enviarWhatsAppDeErro(stage, error) {
       throw new Error(`O numero ${config.whatsappTo} nao tem WhatsApp ou esta invalido.`);
     }
 
-    await client.sendMessage(
+    await enviarConferindo(
+      client,
       numberId._serialized,
       `🚨 *FALHA na automação da OAB*\n` +
         `Etapa: _${stage}_\n\n` +
         `${String(error?.message ?? error).slice(0, 400)}\n\n` +
         `⚠️ *Confira o portal manualmente hoje.*\n` +
         `Detalhes em state.json (lastError) e em logs/.`,
+      'o aviso de falha',
     );
     log.info('WhatsApp: aviso de falha enviado.');
   } finally {
