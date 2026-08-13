@@ -138,13 +138,29 @@ function comoChaves(datas = []) {
   return set;
 }
 
-/** Feriados locais que valem para uma comarca: os globais + os dela. */
+const cacheLocais = new Map();
+
+/**
+ * Feriados locais que valem para uma comarca: os globais + os dela.
+ *
+ * Guardado em cache por comarca, mas a chave inclui o valor cru das variaveis
+ * de ambiente: um prazo de 30 dias uteis chama ehDiaUtil algumas centenas de
+ * vezes, e sem cache cada uma reconstruia os conjuntos do zero. Prender a
+ * chave ao ambiente evita o problema que o cache de feriados() ja teve — o de
+ * congelar a lista da primeira chamada e ignorar mudanca de configuracao.
+ */
 function chavesLocais(comarca = '') {
+  const chaveCache = `${comarca}|${process.env.FERIADOS_EXTRA ?? ''}|${process.env.FERIADOS_COMARCA ?? ''}`;
+  const guardado = cacheLocais.get(chaveCache);
+  if (guardado) return guardado;
+
   const set = comoChaves(config.feriadosExtra);
   for (const data of config.feriadosPorComarca.get(comarca) ?? []) {
     const d = deBR(data);
     if (d) set.add(chave(d));
   }
+
+  cacheLocais.set(chaveCache, set);
   return set;
 }
 

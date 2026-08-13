@@ -1,6 +1,7 @@
 import { config } from './config.js';
 import { log } from './log.js';
 import { unir } from './merge.js';
+import { deBR, ehDiaUtil } from './prazo.js';
 import { buscarNoCNJ } from './sources/cnj.js';
 import { buscarNoPortal } from './sources/portal.js';
 
@@ -29,6 +30,9 @@ export async function coletar(dataBR) {
     const cnj = await buscarNoCNJ(dataBR, {
       numeroOab: config.oab.numero,
       ufOab: config.oab.uf,
+      // Quem decide se vale varrer as variantes de inscricao quando a base vem
+      // vazia. Num dia sem expediente, vazio e o esperado.
+      diaUtil: ehDiaUtil(deBR(dataBR)),
     });
     porFonte.CNJ = cnj.publicacoes;
     if (!cnj.completo) {

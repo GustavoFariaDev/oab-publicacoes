@@ -105,7 +105,7 @@ export function normalizarProcesso(numero = '') {
  *   declarou (corpo.count) — o dia continua em aberto para o retry, do mesmo
  *   jeito que o guard-rail do portal em src/sources/portal.js.
  */
-export async function buscarNoCNJ(dataBR, { numeroOab, ufOab }) {
+export async function buscarNoCNJ(dataBR, { numeroOab, ufOab, diaUtil = true }) {
   const dataISO = brToISO(dataBR);
   const base = String(numeroOab).replace(/\D/g, '');
 
@@ -134,7 +134,11 @@ export async function buscarNoCNJ(dataBR, { numeroOab, ufOab }) {
   // --- Variantes com sufixo: so quando pagam o preco (ver a nota em
   // SUFIXOS_EXTRA). Falha de uma delas nao derruba o dia: marca incompleto, o
   // aviso sai e o retry das 16h tenta de novo. ---
-  const varrer = config.varrerVariantesOab || raiz.itens.length === 0;
+  // Base vazia num dia util e suspeita (pode ser publicacao gravada com
+  // sufixo). Num sabado, domingo ou feriado e o esperado — varrer ali seriam 6
+  // consultas por nada, ~600 por ano, aumentando o risco de 429 sem chance de
+  // achar coisa alguma.
+  const varrer = config.varrerVariantesOab || (raiz.itens.length === 0 && diaUtil);
   if (varrer) {
     log.info(
       raiz.itens.length === 0

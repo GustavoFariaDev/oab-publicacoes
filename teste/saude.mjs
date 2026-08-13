@@ -83,5 +83,22 @@ eq('erro velho nao alerta', diagnosticarDia(DIA, CANAIS).ok, true);
 fs.writeFileSync(arquivo, 'isso nao e json');
 eq('estado corrompido -> alerta (nao explode)', diagnosticarDia(DIA, CANAIS).ok, false);
 
+// --- Dia sem expediente nao gera alarme falso ---
+// 08 e 09/08/2026 sao sabado e domingo. O pipeline nao envia nada nesses dias
+// (nao ha publicacao), entao nao ha registro — e isso NAO e problema.
+gravar(null);
+eq('sabado sem registro -> silencio', diagnosticarDia('2026-08-08', CANAIS).ok, true);
+eq('domingo sem registro -> silencio', diagnosticarDia('2026-08-09', CANAIS).ok, true);
+eq('mas dia util sem registro -> alerta', diagnosticarDia('2026-08-13', CANAIS).ok, false);
+
+// Erro no sabado ainda alerta: se o processo quebrou, e problema mesmo sem
+// publicacao para entregar.
+gravar(null, { at: new Date().toISOString(), stage: 'coleta', message: 'quebrou' });
+eq('erro recente no sabado -> alerta', diagnosticarDia('2026-08-08', CANAIS).ok, false);
+
+// Data ilegivel conta como dia util: na duvida o vigia fala.
+gravar(null);
+eq('data malformada -> alerta em vez de estourar', diagnosticarDia('nao-e-data', CANAIS).ok, false);
+
 console.log(`\n${ok} ok, ${mal} falha(s)`);
 process.exitCode = mal ? 1 : 0;

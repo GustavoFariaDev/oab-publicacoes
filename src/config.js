@@ -142,7 +142,12 @@ export const config = {
     root: ROOT,
     chromeProfile: path.join(ROOT, 'chrome-profile'),
     out: path.join(ROOT, 'out'),
-    logs: path.join(ROOT, 'logs'),
+    // LOG_DIR existe pelo mesmo motivo do STATE_PATH: sem ele, `npm run teste`
+    // despejava as linhas das suites dentro do log do dia (172 delas, medidas
+    // em 12/08). O log e o registro forense de quando a tarefa das 14h quebra —
+    // misturar ruido de teste ali estraga justamente o que se vai ler no pior
+    // momento.
+    logs: process.env.LOG_DIR || path.join(ROOT, 'logs'),
     // STATE_PATH existe para o teste: as regras de estado decidem se um dia e
     // reenviado ou esquecido, e ate agora so davam para exercitar escrevendo no
     // state.json de producao (com backup a mao). Em producao fica no padrao.

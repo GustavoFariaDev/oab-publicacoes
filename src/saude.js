@@ -1,4 +1,5 @@
 import { config } from './config.js';
+import { deBR, ehDiaUtil } from './prazo.js';
 import { canaisEntregues, load } from './state.js';
 
 /**
@@ -18,6 +19,29 @@ export function diagnosticarDia(dataISO, canais = config.canais) {
   const estado = load();
   const dia = estado.days[dataISO];
   const problemas = [];
+
+  // Erro recente conta em qualquer dia, inclusive sabado: se o processo quebrou,
+  // isso e problema mesmo sem publicacao nenhuma para entregar. Fica antes da
+  // saida por dia nao util, de proposito.
+  const HORAS = 12;
+  const erroRecente =
+    estado.lastError?.at && Date.now() - Date.parse(estado.lastError.at) < HORAS * 3600000;
+  if (erroRecente) {
+    problemas.push(`ultimo erro (${estado.lastError.stage}): ${estado.lastError.message}`);
+  }
+
+  // Dia sem expediente e sem registro nao e falha: nao havia o que entregar, e
+  // o pipeline sai sem enviar (ver src/index.js). Alertar aqui seria alarme
+  // falso todo fim de semana — o jeito mais rapido de ensinar alguem a ignorar
+  // o alarme.
+  // dataISO ("aaaa-mm-dd") e o formato ISO que deBR tambem aceita. Data que nao
+  // deu para ler conta como dia util: na duvida, o vigia fala. Silencio por
+  // engano e o unico erro que este arquivo nao pode cometer.
+  const data = deBR(dataISO);
+  const diaUtil = data ? ehDiaUtil(data) : true;
+  if (!dia?.enviadoEm && !diaUtil) {
+    return { ok: problemas.length === 0, problemas };
+  }
 
   if (!dia?.enviadoEm) {
     problemas.push('a execucao do dia nao registrou nenhuma entrega');
@@ -40,14 +64,6 @@ export function diagnosticarDia(dataISO, canais = config.canais) {
 
   if (dia.extraido < dia.esperado) {
     problemas.push(`coletadas ${dia.extraido} de ${dia.esperado} publicacoes esperadas`);
-  }
-
-  // Erro recente. Janela de horas em vez de comparar a data: lastError.at e
-  // UTC e dataISO e Sao Paulo, entao das 21h em diante os dois "dias" deixam de
-  // bater e o erro passaria batido justamente numa execucao noturna.
-  const HORAS = 12;
-  if (estado.lastError?.at && Date.now() - Date.parse(estado.lastError.at) < HORAS * 3600000) {
-    problemas.push(`ultimo erro (${estado.lastError.stage}): ${estado.lastError.message}`);
   }
 
   return { ok: problemas.length === 0, problemas };

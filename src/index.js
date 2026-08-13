@@ -1,4 +1,5 @@
 import { brToISO, config, isDryRun, targetDateBR } from './config.js';
+import { deBR, ehDiaUtil } from './prazo.js';
 import { log } from './log.js';
 import { coletar } from './coletar.js';
 import { gerarPDF } from './pdf.js';
@@ -110,6 +111,18 @@ async function main() {
     const canais = [...config.canais];
     const pendentes = canais.filter((c) => !entregues.has(c));
     const novas = dry ? publicacoes : filterNew(dataISO, publicacoes);
+
+    // Sabado, domingo e feriado nao tem publicacao — conferido na API: 08 e
+    // 09/08/2026 devolvem zero. Mandar "nenhuma publicacao hoje" nesses dias
+    // seriam ~104 mensagens por ano, em cada canal, dizendo nada. E ruido que
+    // custa caro: alerta que toca a toa e alerta que se aprende a ignorar.
+    //
+    // A condicao exige ZERO publicacao, entao isto nunca engole publicacao de
+    // verdade — se aparecer alguma num sabado, ela sai normalmente.
+    if (!dry && publicacoes.length === 0 && !ehDiaUtil(deBR(dataBR))) {
+      log.info(`${dataBR} nao e dia util e nao ha publicacao. Nada a enviar.`);
+      return;
+    }
 
     // !dry primeiro: dry run e ferramenta de teste e nao pode mutar state.json.
     // "completo" segue como veio da coleta: se uma fonte caiu, o dia continua em
