@@ -115,7 +115,7 @@ Na mesma sessão, `getChats()` e `getChatById()` estouram com erro minificado: �
 
 **Medido em 13/08/2026, 08h:** a API do CNJ já tinha 11 publicações do dia; o portal, zero. Às 14h de ontem o portal tinha as 7 do dia — ou seja, o filtro funciona e o portal simplesmente é atualizado mais tarde.
 
-**Não é falha, e o sistema já lida:** quando o portal volta zero e a API traz publicação, o dia é marcado , sai o aviso de divergência e **o dia fica em aberto para os retries das 16h e 17h** — que recoletam e mandam como complemento o que o portal trouxer depois.
+**Não é falha, e o sistema já lida:** quando o portal volta zero e a API traz publicação, o dia é marcado `completo: false`, sai o aviso de divergência e **o dia fica em aberto para os retries das 16h e 17h** — que recoletam e mandam como complemento o que o portal trouxer depois.
 
 **O que observar:** se em vários dias o portal ainda estiver vazio às 17h, vale mover o horário principal para mais tarde. Se ele encher até as 16h, está tudo no lugar.
 
@@ -127,7 +127,7 @@ O portal corta a intimação em ~986 caracteres. Quando a publicação também v
 
 ---
 
-## ~~6. Silêncio indistinguível de falha~~ — RESOLVIDO em 12/08/2026
+## ~~7. Silêncio indistinguível de falha~~ — RESOLVIDO em 12/08/2026
 
 > **Ajuste em 13/08:** sábado, domingo e feriado deixaram de gerar mensagem quando não há publicação (o diário não circula nesses dias, e eram ~104 avisos por ano dizendo nada). O guarda-noturno acompanhou: dia sem expediente e sem registro não é problema. Erro recente, porém, continua alertando em qualquer dia.
 
@@ -139,7 +139,7 @@ Ele confere os canais **configurados**, não um canal fixo: com `CANAIS=whatsapp
 
 ---
 
-## 7. Falta a primeira execução completa de ponta a ponta
+## 8. Falta a primeira execução completa de ponta a ponta
 
 Nunca aconteceu um 14h com **tudo junto**: dia zerado, portal ligado desde o início e dois canais. A de 12/08 rodou com o portal desligado e o dia já entregue.
 
