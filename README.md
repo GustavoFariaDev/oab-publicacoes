@@ -105,7 +105,7 @@ O portal é lido por um Chrome **normal**, ao qual o robô se conecta por CDP. N
 | `npm run once` | Pipeline completo agora, com envio real |
 | `npm run once -- --data=07/08/2026` | Força uma data específica |
 | `npm run checar` | Confere se o dia fechou; avisa só se não fechou |
-| `npm run teste` | 159 verificações (prazo, união, estado, saúde, feriados) |
+| `npm run teste` | 172 verificações (prazo, união, estado, saúde, feriados) |
 | `npm run abrir-chrome` | Abre a janela do portal (login + Cloudflare) |
 | `npm run inspecionar` | Conecta na janela aberta para conferir seletores |
 | `npm run setup:whatsapp` | Reconecta o WhatsApp (novo QR) |

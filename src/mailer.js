@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import nodemailer from 'nodemailer';
 import { config } from './config.js';
 import { calcularPrazo } from './prazo.js';
-import { formatarPartes } from './merge.js';
+import { formatarPartes, oabConstaComoAdvogado } from './merge.js';
 import { log } from './log.js';
 
 function transporter() {
@@ -104,6 +104,13 @@ export async function enviarEmail({
               ${escapeHtml(p.vara)}<br>
               <span style="color:#666">${escapeHtml(p.jornal)}</span>
               ${linhaPrazo(p)}
+              ${
+                oabConstaComoAdvogado(p, config.oab.numero)
+                  ? ''
+                  : `<br><span style="color:#8a6d00;font-size:13px">❓ Sua OAB não aparece no texto —
+                     pode ser você como parte, ou homônimo. O portal recorta por nome, e o texto dele
+                     vem cortado: confira antes de descartar.</span>`
+              }
             </li>`,
           )
           .join('')}</ol>`;

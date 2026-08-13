@@ -80,29 +80,23 @@ export async function buscarNoPortal(dataBR) {
   const { browser, page } = await conectarChromeAberto();
 
   try {
-    // Navega ANTES de conferir sessao. Perguntar "esta logado?" na aba em que o
-    // Chrome calhou de estar nao responde nada: se ela estiver no site
-    // institucional, ou numa aba qualquer que o usuario deixou aberta, a
-    // resposta e sempre "nao" — e o robo acusa sessao caida com a sessao viva.
-    // Depois de ir para a tela de publicacoes, a pergunta passa a ter sentido.
-    await irParaPublicacoesPorData(page);
+    let esperado = await consultarDia(page, dataBR);
 
-    if (await isCloudflareChallenge(page)) {
-      throw new Error(
-        'O portal está mostrando o desafio da Cloudflare. ' +
-          'Clique em "Confirme que é humano" na janela do Chrome e rode de novo.',
-      );
-    }
-    if (!(await page.locator(SEL.loggedIn).count())) {
-      throw new Error('Sessão do portal caiu. Faça o login na janela do Chrome aberta.');
-    }
-    if (!(await page.locator(SEL.dateFrom).count())) {
-      throw new Error('Cheguei em "Publicacoes por Data" mas nao achei os campos de data.');
+    // Zero merece segunda opiniao.
+    //
+    // A tela nao distingue "nenhuma publicacao neste dia" de "a consulta nao
+    // renderizou": nos dois casos nao ha card nenhum para contar. E o portal
+    // erra assim de verdade — em 13/08/2026, logo apos um timeout de
+    // navegacao, uma consulta ao dia 12/08 devolveu 0 onde as outras quatro
+    // devolveram 7.
+    //
+    // Zero e justamente o resultado que nao pode estar errado: ele vira "dia
+    // vazio", e dia vazio e aceito como completo. Entao confirma-se antes.
+    if (esperado === 0) {
+      log.info('Portal: zero no primeiro passe — conferindo de novo antes de aceitar.');
+      esperado = await consultarDia(page, dataBR);
     }
 
-    await filtrarPorDia(page, dataBR);
-
-    const esperado = await somarCardsDoDia(page, dataBR);
     log.info(`Portal: resumo do dia indica ${esperado} publicacao(oes).`);
     if (esperado === 0) return { publicacoes: [], avisos: [], completo: true };
 
@@ -145,17 +139,57 @@ export async function buscarNoPortal(dataBR) {
 }
 
 /**
- * Vai direto pela URL, em vez de clicar no menu.
+ * Um passe completo: abre a tela, confere a sessao, filtra o dia e conta.
  *
- * A tela e um .aspx com endereco proprio e estavel; percorrer o menu para
- * chegar nela seria mais um punhado de seletores para quebrar, sem ganho.
+ * Fica junto num lugar so porque o passe inteiro precisa ser repetivel — ver a
+ * confirmacao de zero em buscarNoPortal.
  *
- * Nao confere nada aqui: quem chama e que decide o que a ausencia dos campos
- * significa (sessao caida, Cloudflare, ou layout mudado), e cada um desses
- * pede uma mensagem diferente.
+ * @returns {Promise<number>} soma dos contadores dos cards do dia
  */
-async function irParaPublicacoesPorData(page) {
-  await page.goto(config.urls.publicacoes, { waitUntil: 'domcontentloaded' });
+async function consultarDia(page, dataBR) {
+  // Navega ANTES de conferir sessao. Perguntar "esta logado?" na aba em que o
+  // Chrome calhou de estar nao responde nada: se ela estiver no site
+  // institucional, ou numa aba qualquer que o usuario deixou aberta, a resposta
+  // e sempre "nao" — e o robo acusa sessao caida com a sessao viva.
+  await irParaPublicacoesPorData(page);
+
+  if (await isCloudflareChallenge(page)) {
+    throw new Error(
+      'O portal está mostrando o desafio da Cloudflare. ' +
+        'Clique em "Confirme que é humano" na janela do Chrome e rode de novo.',
+    );
+  }
+  if (!(await page.locator(SEL.loggedIn).count())) {
+    throw new Error('Sessão do portal caiu. Faça o login na janela do Chrome aberta.');
+  }
+  if (!(await page.locator(SEL.dateFrom).count())) {
+    throw new Error('Cheguei em "Publicacoes por Data" mas nao achei os campos de data.');
+  }
+
+  await filtrarPorDia(page, dataBR);
+  return somarCardsDoDia(page, dataBR);
+}
+
+/**
+ * Vai direto pela URL, em vez de clicar no menu — a tela e um .aspx com
+ * endereco proprio e estavel, e percorrer o menu seria mais seletor para
+ * quebrar sem ganho nenhum.
+ *
+ * Tenta duas vezes: o portal e lento em hora cheia e estourou o timeout de
+ * navegacao duas vezes em dez minutos na manha de 13/08/2026. Uma lentidao
+ * momentanea nao deveria derrubar a fonte do dia inteiro.
+ */
+async function irParaPublicacoesPorData(page, tentativas = 2) {
+  for (let i = 1; ; i++) {
+    try {
+      await page.goto(config.urls.publicacoes, { waitUntil: 'domcontentloaded' });
+      return;
+    } catch (e) {
+      if (i >= tentativas) throw e;
+      log.warn(`Portal: navegacao falhou (${e.message.split('\n')[0]}) — tentando de novo.`);
+      await page.waitForTimeout(3000);
+    }
+  }
 }
 
 async function filtrarPorDia(page, dataBR) {

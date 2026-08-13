@@ -111,7 +111,25 @@ Na mesma sessão, `getChats()` e `getChatById()` estouram com erro minificado: �
 
 ---
 
-## 5. O portal enche mais tarde que a API do CNJ
+## 5. As fontes divergem — e cada divergencia significa uma coisa
+
+Medido em 12 e 13/08/2026, com as duas fontes ligadas:
+
+| Situacao | Causa | Preocupa? |
+|---|---|---|
+| So no portal | O portal recorta por **nome**; a API consulta por **inscricao**. Pega processo em que voce e parte, e pega homonimo | Nao por si so — mas **conferir** |
+| So na API | TRT e TRF publicam em diarios proprios, que os cards do portal (DJ SP / MG / Uniao) nao contam | Nao |
+| Portal zerado de manha | O portal e atualizado mais tarde que a API | Nao — os retries pegam |
+
+**O caso que fechou a duvida:** as 2 publicacoes que so o portal trouxe em 12/08 tinham o nome no **polo ativo**, uma delas com outro advogado constituido (OAB distinta). Nao eram intimacoes dirigidas ao advogado. Testado tambem que nao estavam sob nenhum sufixo de inscricao na API.
+
+**O que ficou no codigo:** `oabConstaComoAdvogado()`. Publicacao vinda da API conta por definicao (a consulta e por inscricao); publicacao so do portal e conferida no texto. Quando a OAB nao aparece, a saida faz uma **pergunta**, nunca um descarte — o portal corta a intimacao em ~986 caracteres, e a linha do advogado pode ter ficado fora do pedaco que veio.
+
+**O que continua sem deteccao:** publicacao em que voce e o advogado e que **nenhuma** das duas fontes traz. Nao ha como saber.
+
+---
+
+## 5b. O portal enche mais tarde que a API do CNJ
 
 **Medido em 13/08/2026, 08h:** a API do CNJ já tinha 11 publicações do dia; o portal, zero. Às 14h de ontem o portal tinha as 7 do dia — ou seja, o filtro funciona e o portal simplesmente é atualizado mais tarde.
 

@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import pkg from 'whatsapp-web.js';
 import { config } from './config.js';
-import { formatarPartes } from './merge.js';
+import { formatarPartes, oabConstaComoAdvogado } from './merge.js';
 import { resumirPrazo } from './prazo.js';
 import { log } from './log.js';
 
@@ -121,6 +121,12 @@ export function montarResumo({ dataBR, publicacoes, avisos = [], complemento = f
       // ele nao diz nada de util: o que decide a agenda e a DATA em que vence,
       // contada em dias uteis a partir do primeiro dia util apos a publicacao.
       if (prazos[i]) linhas.push(prazos[i]);
+      // O portal recorta por nome e pega processo em que voce e PARTE, ou
+      // homonimo. Duvida a conferir, nunca descarte: o texto do portal vem
+      // cortado e a linha do advogado pode nao ter vindo.
+      if (!oabConstaComoAdvogado(p, config.oab.numero)) {
+        linhas.push(`❓ Sua OAB não aparece no texto — pode ser você como parte, ou homônimo. Confira.`);
+      }
       return linhas.join('\n');
     })
     .join('\n\n');

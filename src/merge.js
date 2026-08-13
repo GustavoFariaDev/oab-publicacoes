@@ -21,6 +21,40 @@ import { normalizarProcesso } from './sources/cnj.js';
  * @property {string[]} [fontes]
  */
 
+/**
+ * A inscricao aparece como ADVOGADO nesta publicacao?
+ *
+ * As duas fontes acham publicacao por criterios diferentes, e isso muda o que
+ * cada uma significa:
+ *
+ *   - a API do CNJ e consultada POR INSCRICAO. Se a publicacao veio de la, ele
+ *     consta como advogado — nao ha o que verificar.
+ *   - o portal recorta por NOME. Ele pega tambem processo em que a pessoa e
+ *     PARTE, e pega homonimo.
+ *
+ * Medido em 12/08/2026: as duas publicacoes que so o portal trouxe tinham o
+ * nome no polo ativo, uma delas com OUTRO advogado constituido (OAB distinta).
+ * Nao eram intimacoes dirigidas ao advogado.
+ *
+ * ATENCAO ao usar: "false" aqui NAO significa "nao e sua". O portal corta a
+ * intimacao em ~986 caracteres, e a linha do advogado pode ter ficado fora do
+ * pedaco que veio. Por isso quem exibe deve tratar como DUVIDA a conferir,
+ * nunca como descarte — a assimetria de sempre.
+ */
+export function oabConstaComoAdvogado(pub, numeroOab) {
+  if (pub.fontes?.includes('CNJ')) return true;
+
+  const digitos = String(numeroOab ?? '').replace(/\D/g, '');
+  if (!digitos) return true; // sem numero para comparar, nao ha o que afirmar
+
+  // "OAB SP437271", "OAB 437271/SP", "OAB: 437271" — o que separa varia.
+  //
+  // O (?![0-9]) no fim nao e detalhe: sem ele, a inscricao 437271 casaria
+  // dentro de 4372710 — a de outro advogado — e a publicacao dele apareceria
+  // como sendo sua.
+  return new RegExp(`OAB[^0-9]{0,8}${digitos}(?![0-9])`, 'i').test(pub.intimacao || '');
+}
+
 /** Codigos de polo do DJEN. Qualquer outro passa cru, em vez de sumir. */
 const ROTULO_POLO = { A: 'Autor', P: 'Réu' };
 

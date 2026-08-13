@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import PDFDocument from 'pdfkit';
 import { config, brToISO } from './config.js';
-import { formatarPartes } from './merge.js';
+import { formatarPartes, oabConstaComoAdvogado } from './merge.js';
 import { calcularPrazo } from './prazo.js';
 
 /** "1637" — hora local, para desempatar nomes de arquivo no mesmo dia. */
@@ -180,6 +180,14 @@ export function gerarPDF({ dataBR, publicacoes, avisos = [], complemento = false
     }
 
     escreverPrazo(doc, pub);
+
+    // O portal recorta por nome: pode ser voce como parte, ou homonimo. Duvida
+    // a conferir, nunca descarte — o texto do portal vem cortado.
+    if (!oabConstaComoAdvogado(pub, config.oab.numero)) {
+      doc.font(`Helvetica`).fillColor(`#8a6d00`).fontSize(9);
+      doc.text(`  Sua OAB nao aparece neste texto — pode ser voce como parte, ou homonimo. Confira.`);
+      doc.fillColor(`black`).fontSize(10);
+    }
 
     doc.moveDown(0.8);
     doc.font('Helvetica-Bold').fontSize(11).text('Intimação');
