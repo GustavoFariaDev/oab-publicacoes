@@ -105,7 +105,7 @@ O portal é lido por um Chrome **normal**, ao qual o robô se conecta por CDP. N
 | `npm run once` | Pipeline completo agora, com envio real |
 | `npm run once -- --data=07/08/2026` | Força uma data específica |
 | `npm run checar` | Confere se o dia fechou; avisa só se não fechou |
-| `npm run teste` | 155 verificações (prazo, união, estado, saúde, feriados) |
+| `npm run teste` | 159 verificações (prazo, união, estado, saúde, feriados) |
 | `npm run abrir-chrome` | Abre a janela do portal (login + Cloudflare) |
 | `npm run inspecionar` | Conecta na janela aberta para conferir seletores |
 | `npm run setup:whatsapp` | Reconecta o WhatsApp (novo QR) |
@@ -129,6 +129,7 @@ Pendências e prioridade em **[docs/PENDENCIAS.md](docs/PENDENCIAS.md)**.
 
 - **O robô não sabe de quem é o prazo.** A regra do prazo único evita o caso ruidoso, mas um ato com prazo único dirigido ao perito ainda sai como se fosse seu. Só leitura humana resolve.
 - **`whatsapp-web.js` não confirma entrega.** `sendMessage()` devolve vazio contra a versão atual do WhatsApp Web; a mensagem chega, mas não há `ack` para conferir. O e-mail é a fonte da verdade.
+- **Sábado, domingo e feriado não geram mensagem** quando não há publicação — são dias em que o diário não circula, e avisar "nada hoje" 104 vezes por ano é o jeito mais rápido de ensinar alguém a ignorar o alerta. Publicação que apareça num sábado sai normalmente.
 - **PC desligado às 14h** = risco de perder o dia. A tarefa tem "executar assim que possível se perdida", o que cobre ligar mais tarde no mesmo dia.
 - **A checagem das 18h mora na mesma máquina que ela vigia.** Cobre falha de parte; falha total (PC fora o dia inteiro, todos os canais mortos) só um vigia externo cobriria.
 - **A API do CNJ limita requisição sem documentar o limite** e recusa IP fora do Brasil (HTTP 403).

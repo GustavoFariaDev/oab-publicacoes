@@ -26,7 +26,7 @@ Perder uma publicação é perder prazo processual. A conferência manual é di�
 9. Anota no `state.json` o que já foi enviado, por qual canal, e se as fontes vieram inteiras.
 10. Às 18h, confere se o dia fechou — e só fala se não fechou.
 
-Se não houver publicação nenhuma, ele **avisa mesmo assim** ("nenhuma publicação hoje"). Silêncio nunca é ambíguo: se você não recebeu nada, é porque algo quebrou — não porque o dia estava vazio.
+Se não houver publicação num **dia útil**, ele **avisa mesmo assim** ("nenhuma publicação hoje"): silêncio num dia de expediente seria ambíguo. Já em sábado, domingo e feriado ele não manda nada — o diário não circula, e avisar "nada hoje" 104 vezes por ano ensina a ignorar o alerta. Quem fecha essa conta é a checagem das 18h, que fala quando o dia deveria ter fechado e não fechou.
 
 ---
 
@@ -232,7 +232,7 @@ Feriados: nacionais fixos, mais os móveis derivados da Páscoa (carnaval, Sexta
 
 **O vencimento só é calculado quando o texto declara um único prazo.** Quando o ato cita vários, o robô lista os prazos e não arrisca data. Isso não é excesso de cautela: o DESPACHO de 12/08/2026 no processo 4000000-00.2026.8.26.0000 cita quatro prazos — cinco dias e trinta dias do *perito*, dez dias para os *esclarecimentos dele*, e quinze dias das partes que só correm **depois da entrega do laudo**. Nenhum era do advogado naquele dia. Uma versão anterior escolhia o menor e teria estampado "vence 20/08/2026", data de ninguém. Data falsa gasta a confiança no aviso, e no dia em que o vencimento for verdadeiro ele vai parecer mais um palpite.
 
-O que a conta **não** sabe, e por isso todo vencimento sai marcado como estimativa: feriado local, suspensão do tribunal, prazo em dobro (Fazenda, DP, litisconsortes) e de quem é o prazo. `npm run teste` roda as 155 verificações do projeto.
+O que a conta **não** sabe, e por isso todo vencimento sai marcado como estimativa: feriado local, suspensão do tribunal, prazo em dobro (Fazenda, DP, litisconsortes) e de quem é o prazo. `npm run teste` roda as 159 verificações do projeto.
 
 ---
 

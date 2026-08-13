@@ -119,6 +119,8 @@ O portal corta a intimação em ~986 caracteres. Quando a publicação também v
 
 ## ~~6. Silêncio indistinguível de falha~~ — RESOLVIDO em 12/08/2026
 
+> **Ajuste em 13/08:** sábado, domingo e feriado deixaram de gerar mensagem quando não há publicação (o diário não circula nesses dias, e eram ~104 avisos por ano dizendo nada). O guarda-noturno acompanhou: dia sem expediente e sem registro não é problema. Erro recente, porém, continua alertando em qualquer dia.
+
 Uma tarefa às **18h** (`npm run checar`) lê o estado do dia e avisa se ele não fechou: sem entrega registrada, canal configurado faltando, fonte incompleta, contagem que não bate, ou erro recente. Dia certo não gera mensagem — alerta diário de "está tudo bem" vira ruído, e ruído é o que faz um alerta ser ignorado no dia em que importa.
 
 Ele confere os canais **configurados**, não um canal fixo: com `CANAIS=whatsapp` não alerta por falta de e-mail, e um canal novo no `.env` entra na conferência sozinho.
