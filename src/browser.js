@@ -35,14 +35,18 @@ export async function conectarChromeAberto({ abrirSePreciso = true } = {}) {
   const context = browser.contexts()[0];
   if (!context) throw new Error('Chrome conectado, mas sem nenhuma aba aberta.');
 
-  // pages()[0] e a primeira aba da janela, nao necessariamente a do portal —
-  // se o usuario tiver outra aba aberta na frente (ou a restaurada pelo Chrome
-  // ao reabrir), pages()[0] pode ser qualquer coisa e o scraper leria a pagina
-  // errada em vez de detectar sessao caida. Preferir a aba que ja esta no
-  // dominio do portal quando existir.
+  // Escolhe a aba pelo HOST do portal, nao por "contem oabsp.org.br".
+  //
+  // Medido em 13/08/2026: havia duas abas abertas, o site institucional
+  // (www.oabsp.org.br) e o portal (recortedigital.oabsp.org.br). O casamento
+  // largo pegava a institucional, que obviamente nao tem "Sair" nem "Bem-vindo"
+  // — e o scraper concluia "sessao do portal caiu" com a sessao intacta. Erro
+  // de diagnostico e pior que erro de execucao: manda consertar o que nao esta
+  // quebrado.
+  const host = new URL(config.urls.publicacoes).host;
   const paginas = context.pages();
   const page =
-    paginas.find((p) => p.url().includes('oabsp.org.br')) ?? paginas[0] ?? (await context.newPage());
+    paginas.find((p) => p.url().includes(host)) ?? paginas[0] ?? (await context.newPage());
   page.setDefaultTimeout(config.navTimeoutMs);
   page.setDefaultNavigationTimeout(config.navTimeoutMs);
   return { browser, context, page };

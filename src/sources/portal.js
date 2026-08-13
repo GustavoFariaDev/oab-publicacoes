@@ -80,6 +80,13 @@ export async function buscarNoPortal(dataBR) {
   const { browser, page } = await conectarChromeAberto();
 
   try {
+    // Navega ANTES de conferir sessao. Perguntar "esta logado?" na aba em que o
+    // Chrome calhou de estar nao responde nada: se ela estiver no site
+    // institucional, ou numa aba qualquer que o usuario deixou aberta, a
+    // resposta e sempre "nao" — e o robo acusa sessao caida com a sessao viva.
+    // Depois de ir para a tela de publicacoes, a pergunta passa a ter sentido.
+    await irParaPublicacoesPorData(page);
+
     if (await isCloudflareChallenge(page)) {
       throw new Error(
         'O portal está mostrando o desafio da Cloudflare. ' +
@@ -89,8 +96,10 @@ export async function buscarNoPortal(dataBR) {
     if (!(await page.locator(SEL.loggedIn).count())) {
       throw new Error('Sessão do portal caiu. Faça o login na janela do Chrome aberta.');
     }
+    if (!(await page.locator(SEL.dateFrom).count())) {
+      throw new Error('Cheguei em "Publicacoes por Data" mas nao achei os campos de data.');
+    }
 
-    await irParaPublicacoesPorData(page);
     await filtrarPorDia(page, dataBR);
 
     const esperado = await somarCardsDoDia(page, dataBR);
@@ -140,12 +149,13 @@ export async function buscarNoPortal(dataBR) {
  *
  * A tela e um .aspx com endereco proprio e estavel; percorrer o menu para
  * chegar nela seria mais um punhado de seletores para quebrar, sem ganho.
+ *
+ * Nao confere nada aqui: quem chama e que decide o que a ausencia dos campos
+ * significa (sessao caida, Cloudflare, ou layout mudado), e cada um desses
+ * pede uma mensagem diferente.
  */
 async function irParaPublicacoesPorData(page) {
   await page.goto(config.urls.publicacoes, { waitUntil: 'domcontentloaded' });
-  if (!(await page.locator(SEL.dateFrom).count())) {
-    throw new Error('Cheguei em "Publicacoes por Data" mas nao achei os campos de data.');
-  }
 }
 
 async function filtrarPorDia(page, dataBR) {
