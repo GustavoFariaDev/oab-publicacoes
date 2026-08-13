@@ -111,7 +111,17 @@ Na mesma sessão, `getChats()` e `getChatById()` estouram com erro minificado: �
 
 ---
 
-## 5. Publicação que só existe no portal sai com texto cortado
+## 5. O portal enche mais tarde que a API do CNJ
+
+**Medido em 13/08/2026, 08h:** a API do CNJ já tinha 11 publicações do dia; o portal, zero. Às 14h de ontem o portal tinha as 7 do dia — ou seja, o filtro funciona e o portal simplesmente é atualizado mais tarde.
+
+**Não é falha, e o sistema já lida:** quando o portal volta zero e a API traz publicação, o dia é marcado , sai o aviso de divergência e **o dia fica em aberto para os retries das 16h e 17h** — que recoletam e mandam como complemento o que o portal trouxer depois.
+
+**O que observar:** se em vários dias o portal ainda estiver vazio às 17h, vale mover o horário principal para mais tarde. Se ele encher até as 16h, está tudo no lugar.
+
+---
+
+## 6. Publicação que só existe no portal sai com texto cortado
 
 O portal corta a intimação em ~986 caracteres. Quando a publicação também vem da API, a união fica com o texto inteiro. Quando só existe no portal, sai a prévia cortada — em 12/08 foi 1 das 7. Ver item 3b de `docs/MELHORIAS.md`.
 
