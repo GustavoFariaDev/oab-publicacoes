@@ -24,6 +24,11 @@ export async function coletar(dataBR) {
   const avisos = [];
   const falhas = [];
   let completo = true;
+  // O print do portal e anexo do e-mail. Ate 14/08/2026 ele era salvo em disco
+  // e o caminho morria aqui — index.js mandava screenshotPath: null fixo, entao
+  // o arquivo existia em out/ e nunca ia junto. Sai daqui porque so o portal
+  // produz print, e a coleta e quem fala com o envio.
+  let screenshotPath = null;
 
   // --- Fonte 1: API do CNJ (DJEN) ---
   try {
@@ -56,6 +61,7 @@ export async function coletar(dataBR) {
       const portal = await buscarNoPortal(dataBR);
       porFonte.Portal = portal.publicacoes;
       avisos.push(...portal.avisos);
+      screenshotPath = portal.screenshotPath ?? null;
       if (!portal.completo) completo = false;
 
       // Portal "genuinamente vazio" (esperado === 0) e sucesso, mas se o CNJ
@@ -92,5 +98,5 @@ export async function coletar(dataBR) {
   }
 
   const resultado = unir(porFonte);
-  return { ...resultado, avisos: [...avisos, ...resultado.avisos], completo, falhas };
+  return { ...resultado, avisos: [...avisos, ...resultado.avisos], completo, falhas, screenshotPath };
 }

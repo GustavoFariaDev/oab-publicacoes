@@ -98,7 +98,9 @@ async function main() {
     // portal, que e a unica contagem independente da nossa extracao.
     const esperado = Math.max(publicacoes.length, ...Object.values(resumoFontes));
     const extraido = publicacoes.length;
-    const resultado = { ...coleta, dataBR, esperado, extraido, screenshotPath: null };
+    // screenshotPath vem da coleta (so o portal produz print) e pode ser null:
+    // o print e best-effort e o mailer ja confere existencia antes de anexar.
+    const resultado = { ...coleta, dataBR, esperado, extraido };
     log.info(`Coletadas ${extraido} publicacao(oes). Fontes: ${JSON.stringify(resumoFontes)}`);
 
     // Dedupe: num segundo run do mesmo dia (retry apos falha, ou "once" rodado

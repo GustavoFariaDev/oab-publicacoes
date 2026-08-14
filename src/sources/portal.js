@@ -98,7 +98,7 @@ export async function buscarNoPortal(dataBR) {
     }
 
     log.info(`Portal: resumo do dia indica ${esperado} publicacao(oes).`);
-    if (esperado === 0) return { publicacoes: [], avisos: [], completo: true };
+    if (esperado === 0) return { publicacoes: [], avisos: [], completo: true, screenshotPath: null };
 
     await page.locator(SEL.visualizarTudo).first().click();
     // Espera a LISTA aparecer, nao a rede sossegar: o "Visualizar tudo" e um
@@ -112,7 +112,7 @@ export async function buscarNoPortal(dataBR) {
       .waitFor({ state: 'visible', timeout: config.navTimeoutMs });
 
     const publicacoes = await extrairPublicacoes(page);
-    await salvarScreenshot(page, dataBR);
+    const screenshotPath = await salvarScreenshot(page, dataBR);
 
     // Este e o unico guard-rail de contagem que ainda e independente: o resumo
     // do dia e contado pelo proprio portal, antes de qualquer coisa nossa. Se a
@@ -131,7 +131,7 @@ export async function buscarNoPortal(dataBR) {
     } else if (publicacoes.length > esperado) {
       log.info(`Portal: resumo dizia ${esperado}, extraidas ${publicacoes.length}.`);
     }
-    return { publicacoes, avisos, completo };
+    return { publicacoes, avisos, completo, screenshotPath };
   } finally {
     // Só desconecta: a janela é do usuário e continua aberta para a próxima vez.
     await browser.close().catch(() => {});
@@ -332,10 +332,48 @@ async function extrairCard(card) {
   return pub;
 }
 
+/**
+ * Print da tela. NUNCA lanca — devolve o caminho, ou null se nao deu.
+ *
+ * O "nunca lanca" e a regra inteira desta funcao, e ela nasceu de um prejuizo
+ * real. Ate 14/08/2026 o print era `page.screenshot({ fullPage: true })` seco,
+ * herdando o timeout padrao da page (config.navTimeoutMs). Com "Visualizar
+ * tudo" aberto a pagina fica altissima — um dia de 5 publicacoes ja estourou os
+ * 45s montando a imagem — e a excecao subia por buscarNoPortal, que a essa
+ * altura JA TINHA as publicacoes extraidas na mao. Elas iam para o lixo junto:
+ * coletar.js registrava "Fonte Portal falhou" e a fonte entrava como zero.
+ *
+ * Duas vezes em 14/08 o dia foi enviado com Portal=0 por causa disso, com o
+ * portal funcionando perfeitamente. Trocar a publicacao do advogado por uma
+ * imagem ilustrativa e a pior troca possivel: o print e conferencia, a
+ * publicacao e prazo.
+ *
+ * Timeout proprio e curto pelo mesmo motivo — este e o passo mais dispensavel
+ * da coleta e nao pode segurar o envio. Se a pagina inteira nao sai, vale a
+ * tela visivel; se nem essa sai, vale seguir sem print.
+ */
+const SHOT_FULL_MS = 20000;
+const SHOT_VIEWPORT_MS = 10000;
+
 async function salvarScreenshot(page, dataBR) {
   const dir = path.join(config.paths.out, brToISO(dataBR));
   fs.mkdirSync(dir, { recursive: true });
   const file = path.join(dir, 'portal.png');
-  await page.screenshot({ path: file, fullPage: true });
-  return file;
+  const motivo = (e) => String(e?.message ?? e).split('\n')[0];
+
+  try {
+    await page.screenshot({ path: file, fullPage: true, timeout: SHOT_FULL_MS });
+    return file;
+  } catch (e) {
+    log.warn(`Portal: print da pagina inteira falhou (${motivo(e)}) — tentando so a tela visivel.`);
+  }
+
+  try {
+    await page.screenshot({ path: file, timeout: SHOT_VIEWPORT_MS });
+    log.info('Portal: print salvo apenas da tela visivel.');
+    return file;
+  } catch (e) {
+    log.warn(`Portal: sem print nesta execucao (${motivo(e)}). As publicacoes nao foram afetadas.`);
+    return null;
+  }
 }
