@@ -25,8 +25,19 @@ if (-not (Test-Path $LinkPath)) {
 $NodeExe = (Get-Command node).Source
 Write-Host "Node: $NodeExe"
 
+# -WakeToRun: se a maquina estiver dormindo (S3), ela acorda sozinha na hora da
+# tarefa. Existe para o PC poder passar a noite dormindo em vez de ligado 24h,
+# sem depender de RTC Alarm na BIOS. Dormindo a sessao do Windows NAO fecha, e
+# e disso que o pipeline depende: o cookie do portal e a sessao do WhatsApp
+# continuam de pe, entao as 14h nao ha desafio da Cloudflare para clicar.
+#
+# Duas coisas que isto NAO faz:
+#   - nao alcanca a maquina DESLIGADA (S5); ai so RTC Alarm na BIOS resolve
+#   - nao faz o PC dormir. Se "Suspender depois de" for "nunca" (o caso aqui),
+#     quem manda dormir e o usuario, pelo menu Iniciar.
 $Settings = New-ScheduledTaskSettingsSet `
     -StartWhenAvailable `
+    -WakeToRun `
     -DontStopIfGoingOnBatteries `
     -AllowStartIfOnBatteries `
     -ExecutionTimeLimit (New-TimeSpan -Minutes 30)
