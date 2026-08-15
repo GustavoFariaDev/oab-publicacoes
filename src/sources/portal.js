@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import { config, brToISO } from '../config.js';
 import { log } from '../log.js';
 import { conectarChromeAberto, isCloudflareChallenge } from '../browser.js';
+import { garantirSessao } from '../login.js';
 
 /**
  * Fonte 2: portal da OAB SP (Historico > Publicacoes por Data).
@@ -159,8 +160,16 @@ async function consultarDia(page, dataBR) {
         'Clique em "Confirme que é humano" na janela do Chrome e rode de novo.',
     );
   }
+  // Sessão caída não é mais motivo de parar: garantirSessao refaz o login pelo
+  // mesmo caminho que o usuário faz a mão (menu > INTIMAÇÕES > senha salva).
+  // Só depois de o login falhar é que a fonte cai — e aí a mensagem diz o que
+  // fazer na janela.
   if (!(await page.locator(SEL.loggedIn).count())) {
-    throw new Error('Sessão do portal caiu. Faça o login na janela do Chrome aberta.');
+    await garantirSessao(page);
+    await irParaPublicacoesPorData(page);
+    if (!(await page.locator(SEL.loggedIn).count())) {
+      throw new Error('Sessão do portal caiu e o login automático não pegou. Entre na janela do Chrome aberta.');
+    }
   }
   if (!(await page.locator(SEL.dateFrom).count())) {
     throw new Error('Cheguei em "Publicacoes por Data" mas nao achei os campos de data.');

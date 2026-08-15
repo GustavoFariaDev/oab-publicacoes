@@ -90,10 +90,20 @@ npm run register-task     # tarefas das 14h, 16h, 17h e 18h
 Para ligar o portal como segunda fonte (`PORTAL=1` no `.env`), faça o primeiro login:
 
 ```bash
-npm run abrir-chrome      # clique no Cloudflare e faça o login nessa janela
+npm run abrir-chrome      # clique no Cloudflare, se aparecer; o resto é sozinho
 ```
 
-Depois disso o robô **abre o Chrome sozinho** quando precisa: a sessão fica salva em `chrome-profile/` e costuma durar semanas. Você só volta a essa janela se o Cloudflare exigir o desafio de novo ou a sessão cair — e o aviso chega pelos canais configurados.
+O login segue **exatamente o caminho que se faz à mão**, e é isso que o robô repete quando a sessão cai:
+
+1. abre `www.oabsp.org.br`
+2. clica no **menu ☰** (as 3 barras, canto superior direito)
+3. clica em **INTIMAÇÕES**
+4. entra com a **senha salva** — a do perfil do Chrome, ou `OAB_USER`/`OAB_PASS` do `.env` se o campo vier vazio
+5. clica em **Entrar**
+
+Ir direto ao formulário de login não serve: o link de INTIMAÇÕES é que carrega a `ReturnUrl` que devolve ao Recorte Digital autenticado.
+
+Depois disso o robô **abre o Chrome sozinho** quando precisa: a sessão fica salva em `chrome-profile/` e costuma durar semanas. Você só volta a essa janela se o Cloudflare exigir o desafio — esse clique é sempre seu.
 
 O portal é lido por um Chrome **normal**, ao qual o robô se conecta por CDP. Não é preferência de estilo: um Chrome lançado pelo Playwright é reprovado pelo Turnstile mesmo com um humano clicando na caixa — as marcas de automação entregam o navegador. Quem clica no desafio é sempre você; o robô só lê a página autenticada.
 

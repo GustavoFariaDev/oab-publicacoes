@@ -131,6 +131,10 @@ export const config = {
   cdpEndpoint: process.env.CDP_ENDPOINT || 'http://127.0.0.1:9222',
 
   urls: {
+    // Site institucional. E por aqui que o login comeca: menu sanduiche >
+    // INTIMACOES (ver src/login.js). Nao da para ir direto ao formulario de
+    // login porque a ReturnUrl dele muda; o menu leva sempre ao lugar certo.
+    site: 'https://www.oabsp.org.br/',
     login:
       'https://www2.oabsp.org.br/asp/dotnet/LoginSite/LoginMain.aspx?ReturnUrl=%2fasp%2fdotnet%2fLoginSite%2fAcessoRestrito%2fgateway.aspx%3fop%3d1&op=1',
     // "Historico > Publicacoes por Data". Endereco proprio e estavel: o robo
