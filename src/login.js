@@ -48,8 +48,19 @@ const SEL = {
   intimacoes: 'a:has-text("INTIMA"), a:has-text("Intima")',
   usuario: 'input[type="text"]:visible, input[type="email"]:visible',
   senha: 'input[type="password"]:visible',
-  entrar:
-    'input[type="submit"], button[type="submit"], input[value="Entrar" i], button:has-text("Entrar")',
+  /**
+   * O submit e procurado DENTRO do formulario da senha, e por rotulo antes de
+   * por tipo.
+   *
+   * Um `input[type=submit]` solto na pagina nao serve: a tela de login tem a
+   * busca do site, e o botao dela tambem e submit. Em 15/08/2026 foi
+   * exatamente ele que o robo tentou clicar por 45s — `aria-label="Search"`,
+   * fora da viewport, enquanto o "Entrar" preenchido esperava do lado.
+   */
+  formSenha: 'form:has(input[type="password"])',
+  entrarRotulo: 'input[value="Entrar" i], input[value="Acessar" i], button:has-text("Entrar")',
+  entrarTipo: 'input[type="submit"], button[type="submit"]',
+  busca: '[aria-label*="search" i], [aria-label*="busca" i]',
 };
 
 const ESPERA_CURTA = 5000;
@@ -79,23 +90,23 @@ async function entrarPeloMenu(page) {
 
   await abrirMenu(page);
 
-  // O link pode abrir em aba nova (target="_blank"). A corrida cobre os dois
-  // casos: se abriu, o login acontece na aba nova; se nao, na mesma.
-  const contexto = page.context();
-  const popup = contexto.waitForEvent('page', { timeout: ESPERA_CURTA }).catch(() => null);
-  await page.locator(SEL.intimacoes).first().click();
-  const nova = await popup;
+  // LE o endereco do link em vez de clicar nele.
+  //
+  // Clicar falhou de verdade, em 15/08/2026: o painel do menu e um overlay mais
+  // alto que a janela, e "Intimações" fica fora da viewport. O Playwright rola
+  // ate ele, confirma "visible, enabled and stable", e mesmo assim recusa —
+  // "element is outside of the viewport" — 92 vezes ate estourar os 45s. E o
+  // link ainda e target="_blank", entao o clique que desse certo abriria uma
+  // aba solta para administrar.
+  //
+  // O href resolve as duas coisas de uma vez. E ele continua sendo o do MENU,
+  // lido da pagina: o caminho e o mesmo que o do clique, so que sem depender de
+  // onde o overlay parou na tela.
+  const href = await page.locator(SEL.intimacoes).first().getAttribute('href');
+  await page.goto(href ?? config.urls.login, { waitUntil: 'domcontentloaded' });
 
-  const alvo = nova ?? page;
-  try {
-    await alvo.waitForLoadState('domcontentloaded');
-    await recusarCloudflare(alvo);
-    await preencherEEntrar(alvo);
-  } finally {
-    // Fecha so o que este codigo abriu: uma segunda aba no mesmo host confunde
-    // a escolha de aba em browser.js, que casa pelo host do portal.
-    if (nova) await nova.close().catch(() => {});
-  }
+  await recusarCloudflare(page);
+  await preencherEEntrar(page);
 }
 
 async function abrirMenu(page) {
@@ -142,7 +153,7 @@ async function preencherEEntrar(page) {
   await preencherSeVazio(page.locator(SEL.usuario).first(), config.oab.user);
   await preencherSeVazio(senha, config.oab.pass);
 
-  await page.locator(SEL.entrar).first().click();
+  await submeter(page);
   await page.waitForLoadState('networkidle').catch(() => {});
 
   await recusarCloudflare(page);
@@ -153,6 +164,40 @@ async function preencherEEntrar(page) {
     );
   }
   log.info('Portal: login concluido.');
+}
+
+/**
+ * Aperta o "Entrar".
+ *
+ * O clique e disparado no DOM (`el.click()`) em vez do clique real do
+ * Playwright. Nao e atalho: o layout deste site poe elementos legitimos fora da
+ * viewport — foi assim com "Intimações" no menu e com o submit da busca —, e o
+ * clique real recusa por posicao mesmo com o elemento visivel e habilitado. O
+ * DOM nao tem essa objecao, e aqui nao ha nada a simular: o portal so precisa
+ * do postback do botao.
+ */
+async function submeter(page) {
+  const form = page.locator(SEL.formSenha).first();
+  const escopo = (await form.count()) ? form : page;
+
+  for (const seletor of [SEL.entrarRotulo, SEL.entrarTipo]) {
+    for (const botao of await escopo.locator(seletor).all()) {
+      // A busca do site tambem e submit deste mesmo form (ASP.NET envolve a
+      // pagina inteira num <form> so).
+      if (await botao.locator(SEL.busca).count()) continue;
+      const rotuloProprio = (await botao.getAttribute('aria-label')) ?? '';
+      if (/search|busca|pesquis/i.test(rotuloProprio)) continue;
+      if (!(await botao.isVisible().catch(() => false))) continue;
+
+      await botao.evaluate((el) => el.click());
+      return;
+    }
+  }
+
+  throw new Error(
+    'Preenchi o login mas nao achei o botao "Entrar". ' +
+      'Entre a mao na janela do Chrome aberta e rode de novo.',
+  );
 }
 
 async function preencherSeVazio(campo, valor) {
