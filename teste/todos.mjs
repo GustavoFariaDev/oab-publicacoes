@@ -11,7 +11,15 @@ const AQUI = path.dirname(fileURLToPath(import.meta.url));
 // as linhas deles no log do dia — o mesmo arquivo que se le quando a execucao
 // das 14h quebra.
 const LOG_DESCARTAVEL = fs.mkdtempSync(path.join(os.tmpdir(), 'oab-log-'));
-const SUITES = ['prazo.mjs', 'merge.mjs', 'estado.mjs', 'saude.mjs', 'feriado-local.mjs', 'advogado.mjs'];
+const SUITES = [
+  'prazo.mjs',
+  'merge.mjs',
+  'estado.mjs',
+  'saude.mjs',
+  'feriado-local.mjs',
+  'advogado.mjs',
+  'whatsapp-ack.mjs',
+];
 
 let falhou = false;
 const resumo = [];

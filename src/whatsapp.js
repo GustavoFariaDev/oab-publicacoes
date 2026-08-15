@@ -5,6 +5,7 @@ import { config } from './config.js';
 import { formatarPartes, oabConstaComoAdvogado } from './merge.js';
 import { resumirPrazo } from './prazo.js';
 import { log } from './log.js';
+import { casaCom, esperarAck } from './whatsapp-ack.js';
 
 const { Client, LocalAuth, MessageMedia } = pkg;
 
@@ -101,16 +102,17 @@ function aguardarReady(client, timeoutMs = 90000) {
  */
 const ACK_TIMEOUT_MS = 60000;
 
-async function enviarConferindo(client, chatId, conteudo, oQue) {
+/** Envia e so volta com ack >= 1. Exportada para o setup usar o mesmo caminho. */
+export async function enviarConferindo(client, chatId, conteudo, oQue) {
   // O ouvinte e armado ANTES do envio: o ack de mensagem curta chega em ~2s e
   // passaria antes de haver quem escutasse.
-  const espera = esperarAck(client, casaCom(conteudo));
+  const espera = esperarAck(client, casaCom(conteudo), { timeoutMs: ACK_TIMEOUT_MS });
   try {
     await client.sendMessage(chatId, conteudo);
-    const ack = await espera.promise;
-    if (ack === null) {
+    const { ack, motivo } = await espera.promise;
+    if (ack == null) {
       throw new Error(
-        `WhatsApp: ${oQue} nao foi confirmado em ${ACK_TIMEOUT_MS / 1000}s. ` +
+        `WhatsApp: ${oQue} nao foi confirmado (${motivo}). ` +
           'A mensagem provavelmente NAO saiu — o retry tentara de novo.',
       );
     }
@@ -118,54 +120,6 @@ async function enviarConferindo(client, chatId, conteudo, oQue) {
   } finally {
     espera.cancel();
   }
-}
-
-/**
- * Reconhece a nossa mensagem entre os acks que passam.
- *
- * Texto casa por prefixo, nao por igualdade: o WhatsApp normaliza o corpo (e o
- * resumo tem 1.6k caracteres, emoji e markdown), e um acento reescrito na volta
- * faria a comparacao exata perder o ack da propria mensagem que acabou de sair.
- * Anexo nao tem corpo para comparar — casa por ser nosso e ter midia.
- */
-function casaCom(conteudo) {
-  if (typeof conteudo !== 'string') return (m) => ehNossa(m) && m.hasMedia;
-  const inicio = conteudo.slice(0, 120);
-  return (m) => ehNossa(m) && String(m.body ?? '').slice(0, 120) === inicio;
-}
-
-const ehNossa = (m) => Boolean(m?.fromMe ?? m?.id?.fromMe);
-
-/**
- * Espera o ack. Devolve o nivel alcancado, ou null se nao veio a tempo.
- *
- * Mesma forma de aguardarReady, e pelo mesmo motivo: quem arma precisa poder
- * desarmar. Sem o cancel, o timer de 60s de um envio que ja terminou seguraria
- * o processo depois de o cliente ter sido destruido.
- */
-function esperarAck(client, casa, { timeoutMs = ACK_TIMEOUT_MS, minimo = 1 } = {}) {
-  let cancel;
-
-  const promise = new Promise((resolve) => {
-    let done = false;
-    const onAck = (msg, ack) => {
-      if (ack >= minimo && casa(msg)) settle(ack);
-    };
-    const timer = setTimeout(() => settle(null), timeoutMs);
-
-    function settle(valor) {
-      if (done) return;
-      done = true;
-      clearTimeout(timer);
-      client.off('message_ack', onAck);
-      resolve(valor);
-    }
-
-    client.on('message_ack', onAck);
-    cancel = () => settle(null);
-  });
-
-  return { promise, cancel };
 }
 
 /** Resumo curto — o que cabe na tela do celular. O inteiro teor vai no PDF. */
@@ -258,12 +212,18 @@ export async function enviarWhatsApp({
         // do anexo nao derruba o envio. Mas o bilhete que a substitui passa
         // pela mesma confirmacao: mandar sem conferir foi o que criou este bug.
         const onde = config.canais.has('email') ? 'no e-mail e em' : 'em';
-        await enviarConferindo(
-          client,
-          chatId,
-          `📄 PDF completo ${onde}:\n${pdfPath}`,
-          'o aviso do PDF',
-        );
+        try {
+          await enviarConferindo(
+            client,
+            chatId,
+            `📄 PDF completo ${onde}:\n${pdfPath}`,
+            'o aviso do PDF',
+          );
+        } catch (e2) {
+          // O resumo — o que importa — ja saiu com ack. Derrubar o canal aqui
+          // faria o retry reenviar o dia inteiro por causa de um bilhete.
+          log.warn('WhatsApp: o aviso do PDF tambem nao confirmou —', e2.message);
+        }
       }
     }
   } finally {
