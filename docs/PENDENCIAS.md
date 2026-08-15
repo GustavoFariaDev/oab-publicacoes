@@ -91,23 +91,33 @@ Por isso não se cola lista de feriado sem conferir. Chegou a haver `08/12/2026`
 
 ---
 
-## 4. O WhatsApp entrega, mas não confirma que entregou
+## ~~4. O WhatsApp entrega, mas não confirma que entregou~~ — RESOLVIDO em 15/08/2026, e a premissa estava errada
 
-**Apurado em 12/08/2026.** `client.sendMessage()` devolve `undefined` em vez de um `Message` com id:
+**O que se acreditava desde 12/08:** `client.sendMessage()` devolve `undefined` em vez de um `Message` com id:
 
 ```js
 return sentMsg ? new Message(this, sentMsg) : undefined;   // Client.js
 ```
 
-Na mesma sessão, `getChats()` e `getChatById()` estouram com erro minificado: é a construção dos modelos de retorno que está quebrada contra o WhatsApp Web atual.
+Na mesma sessão, `getChats()` e `getChatById()` estouram com erro minificado — a construção dos modelos de retorno está quebrada contra o WhatsApp Web 2.3000. Disso se concluiu: *"o envio funciona, só não dá para conferir"*, e `enviarConferindo()` passou a **não** lançar erro no retorno vazio.
 
-**O envio em si funciona** — mensagens de teste com retorno vazio chegaram no aparelho de destino, e as 7 publicações do dia saíram. Vale registrar o caminho errado percorrido: o retorno vazio foi lido como "não enviou", e por meia hora o diagnóstico foi de canal morto. **Retorno vazio não é prova de não-entrega — é ausência de prova.**
+**A conclusão estava errada, e escondeu uma falha real por três dias.** Em 15/08 um envio completo saiu com "resumo enviado" e "PDF enviado" no log, e **nada chegou no aparelho**. Bissecção com mensagens rotuladas contra a sessão real:
 
-**O que ficou:** `enviarConferindo()` registra aviso no log e **não** lança erro. Tratar "sem confirmação" como "não enviou" derrubaria o canal, e o custo desse engano é o dia inteiro sem publicação.
+| Teste | Resultado |
+|---|---|
+| Mensagem curta, com espera antes de fechar | chegou |
+| Resumo real (1.6k caracteres, emoji, markdown) | chegou |
+| PDF anexo | chegou |
+| Mandar e chamar `client.destroy()` **na hora** | **não chegou** |
+| Mandar, esperar 8s e chamar `destroy()` | chegou |
 
-**O que NÃO resolve:** `1.34.7` é a última do npm (abril/2026) e o `main` do GitHub (julho/2026) tem o mesmo comportamento — os dois testados.
+O `sendMessage` volta **antes de a mensagem sair**, e o `destroy()` do bloco `finally` matava o navegador com ela ainda na fila. Não era limitação cosmética: era perda de mensagem, anunciada como sucesso.
 
-**Caminho de verdade:** trocar para [Baileys](https://github.com/WhiskeySockets/Baileys), que fala o protocolo direto, sem navegador, e devolve `ack` de verdade. Significa reescrever `src/whatsapp.js` e parear de novo. Com o e-mail funcionando, deixou de ser urgente.
+**Por que o erro durou:** *"retorno vazio não é prova de não-entrega"* estava certo, e as mensagens de teste de 12/08 realmente chegaram — mas todas foram digitadas à mão, com o processo vivo depois. Nenhuma reproduziu o `destroy()` imediato do pipeline. **O teste que valida um envio precisa fechar o cliente do mesmo jeito que a produção fecha.**
+
+**Como ficou:** existe confirmação de verdade, e ela nunca dependeu do retorno quebrado — o evento `message_ack` funciona (ack 1 = servidor recebeu, 2 = chegou no aparelho, 3 = lida). `enviarConferindo()` arma o ouvinte **antes** do envio, espera ack ≥ 1 em até 60s e **lança** se não vier. Sem ack, o canal fica pendente e o retry das 16h/17h tenta de novo — duplicata é chateação, publicação faltando é prazo.
+
+**Baileys deixou de ser necessário para isto.** Continua sendo a opção se a biblioteca quebrar de vez, mas o motivo que a justificava (não há como saber se entregou) não existe mais.
 
 ---
 

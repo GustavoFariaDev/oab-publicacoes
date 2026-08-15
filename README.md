@@ -138,7 +138,7 @@ Pendências e prioridade em **[docs/PENDENCIAS.md](docs/PENDENCIAS.md)**.
 ## Limites conhecidos
 
 - **O robô não sabe de quem é o prazo.** A regra do prazo único evita o caso ruidoso, mas um ato com prazo único dirigido ao perito ainda sai como se fosse seu. Só leitura humana resolve.
-- **`whatsapp-web.js` não confirma entrega.** `sendMessage()` devolve vazio contra a versão atual do WhatsApp Web; a mensagem chega, mas não há `ack` para conferir. O e-mail é a fonte da verdade.
+- **`whatsapp-web.js` devolve vazio no `sendMessage()`** contra o WhatsApp Web 2.3000, e `getChats()`/`getChatById()` estouram com erro minificado. A confirmação vem do evento `message_ack`, que continua funcionando — o envio só é dado por feito com ack ≥ 1 (servidor recebeu). Sem ack, o canal fica pendente e o retry tenta de novo.
 - **Sábado, domingo e feriado não geram mensagem** quando não há publicação — são dias em que o diário não circula, e avisar "nada hoje" 104 vezes por ano é o jeito mais rápido de ensinar alguém a ignorar o alerta. Publicação que apareça num sábado sai normalmente.
 - **PC desligado às 14h** = risco de perder o dia. A tarefa tem "executar assim que possível se perdida", o que cobre ligar mais tarde no mesmo dia.
 - **A checagem das 18h mora na mesma máquina que ela vigia.** Cobre falha de parte; falha total (PC fora o dia inteiro, todos os canais mortos) só um vigia externo cobriria.

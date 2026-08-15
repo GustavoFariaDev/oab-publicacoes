@@ -75,33 +75,97 @@ function aguardarReady(client, timeoutMs = 90000) {
 }
 
 /**
- * Envia e registra se deu para confirmar.
+ * Envia e SO VOLTA quando o WhatsApp confirmou que a mensagem saiu.
  *
- * whatsapp-web.js deveria devolver um Message com id. Contra o WhatsApp Web de
- * 12/08/2026 ele devolve `undefined` — a construcao do modelo de retorno esta
- * quebrada (na mesma sessao, getChats() e getChatById() estouram com erro
- * minificado). O envio EM SI funciona: mensagens de teste com esse retorno
- * vazio chegaram normalmente no aparelho de destino, conferido as 14:55 e
- * 14:59 daquele dia.
+ * `sendMessage` devolve `undefined` contra o WhatsApp Web 2.3000 — a construcao
+ * do modelo de retorno esta quebrada (na mesma sessao, getChats() e
+ * getChatById() estouram com erro minificado). Durante um tempo isto aqui
+ * tratou o retorno vazio como "limitacao cosmetica: a mensagem chega, so nao da
+ * para conferir". Estava errado, e custou caro.
  *
- * Por isso aqui NAO se lanca erro quando a confirmacao falta. Tratar "sem
- * confirmacao" como "nao enviou" derrubaria o unico canal que existe, e o
- * custo desse engano e o dia inteiro sem publicacao — bem maior do que o de
- * uma mensagem repetida.
+ * Medido em 15/08/2026, com dois envios lado a lado: mandar e fechar o cliente
+ * na hora NAO entrega; mandar, esperar 8s e fechar entrega. O `sendMessage`
+ * volta antes de a mensagem sair, e o `client.destroy()` do bloco finally
+ * matava o navegador com ela ainda na fila. O log dizia "resumo enviado" e o
+ * celular nao recebia nada — o pior formato possivel de falha, porque o
+ * advogado so descobre que ficou sem a publicacao quando o prazo ja passou.
  *
- * O aviso no log fica: se um dia a mensagem realmente parar de sair, e o
- * primeiro lugar onde olhar. Confirmacao de verdade so vem com uma biblioteca
- * que funcione (ver docs/PENDENCIAS.md).
+ * A confirmacao real existe e nao depende do retorno quebrado: o evento
+ * `message_ack` funciona. ack 1 = o servidor do WhatsApp recebeu (dai em diante
+ * a entrega e problema deles), 2 = chegou no aparelho, 3 = lida. Esperar ack
+ * >= 1 e o que transforma "mandei" em "saiu".
+ *
+ * Sem ack, LANCA. Antes o silencio virava sucesso; agora vira canal pendente, e
+ * o retry das 16h/17h tenta de novo. Uma mensagem repetida e chateacao, uma
+ * publicacao que nao chegou e prazo.
  */
+const ACK_TIMEOUT_MS = 60000;
+
 async function enviarConferindo(client, chatId, conteudo, oQue) {
-  const enviada = await client.sendMessage(chatId, conteudo);
-  if (!enviada?.id?._serialized) {
-    log.warn(
-      `WhatsApp: ${oQue} saiu sem confirmacao da biblioteca ` +
-        '(retorno vazio — limitacao conhecida do whatsapp-web.js).',
-    );
+  // O ouvinte e armado ANTES do envio: o ack de mensagem curta chega em ~2s e
+  // passaria antes de haver quem escutasse.
+  const espera = esperarAck(client, casaCom(conteudo));
+  try {
+    await client.sendMessage(chatId, conteudo);
+    const ack = await espera.promise;
+    if (ack === null) {
+      throw new Error(
+        `WhatsApp: ${oQue} nao foi confirmado em ${ACK_TIMEOUT_MS / 1000}s. ` +
+          'A mensagem provavelmente NAO saiu — o retry tentara de novo.',
+      );
+    }
+    log.info(`WhatsApp: ${oQue} saiu, confirmado (ack=${ack}).`);
+  } finally {
+    espera.cancel();
   }
-  return enviada;
+}
+
+/**
+ * Reconhece a nossa mensagem entre os acks que passam.
+ *
+ * Texto casa por prefixo, nao por igualdade: o WhatsApp normaliza o corpo (e o
+ * resumo tem 1.6k caracteres, emoji e markdown), e um acento reescrito na volta
+ * faria a comparacao exata perder o ack da propria mensagem que acabou de sair.
+ * Anexo nao tem corpo para comparar — casa por ser nosso e ter midia.
+ */
+function casaCom(conteudo) {
+  if (typeof conteudo !== 'string') return (m) => ehNossa(m) && m.hasMedia;
+  const inicio = conteudo.slice(0, 120);
+  return (m) => ehNossa(m) && String(m.body ?? '').slice(0, 120) === inicio;
+}
+
+const ehNossa = (m) => Boolean(m?.fromMe ?? m?.id?.fromMe);
+
+/**
+ * Espera o ack. Devolve o nivel alcancado, ou null se nao veio a tempo.
+ *
+ * Mesma forma de aguardarReady, e pelo mesmo motivo: quem arma precisa poder
+ * desarmar. Sem o cancel, o timer de 60s de um envio que ja terminou seguraria
+ * o processo depois de o cliente ter sido destruido.
+ */
+function esperarAck(client, casa, { timeoutMs = ACK_TIMEOUT_MS, minimo = 1 } = {}) {
+  let cancel;
+
+  const promise = new Promise((resolve) => {
+    let done = false;
+    const onAck = (msg, ack) => {
+      if (ack >= minimo && casa(msg)) settle(ack);
+    };
+    const timer = setTimeout(() => settle(null), timeoutMs);
+
+    function settle(valor) {
+      if (done) return;
+      done = true;
+      clearTimeout(timer);
+      client.off('message_ack', onAck);
+      resolve(valor);
+    }
+
+    client.on('message_ack', onAck);
+    cancel = () => settle(null);
+  });
+
+  return { promise, cancel };
 }
 
 /** Resumo curto — o que cabe na tela do celular. O inteiro teor vai no PDF. */
@@ -181,18 +245,25 @@ export async function enviarWhatsApp({
       montarResumo({ dataBR, publicacoes, avisos, complemento }),
       'o resumo',
     );
-    log.info('WhatsApp: resumo enviado.');
 
     if (pdfPath && fs.existsSync(pdfPath)) {
       try {
         await enviarConferindo(client, chatId, MessageMedia.fromFilePath(pdfPath), 'o PDF');
-        log.info('WhatsApp: PDF enviado.');
       } catch (e) {
         log.warn('WhatsApp: falhou o anexo do PDF —', e.message);
         // Sem o canal de e-mail ligado, mandar o leitor "olhar no e-mail" seria
         // apontar para um lugar onde nada chegou: so resta o arquivo local.
+        //
+        // O resumo, que e o que importa, ja saiu confirmado — por isso a falha
+        // do anexo nao derruba o envio. Mas o bilhete que a substitui passa
+        // pela mesma confirmacao: mandar sem conferir foi o que criou este bug.
         const onde = config.canais.has('email') ? 'no e-mail e em' : 'em';
-        await client.sendMessage(chatId, `📄 PDF completo ${onde}:\n${pdfPath}`);
+        await enviarConferindo(
+          client,
+          chatId,
+          `📄 PDF completo ${onde}:\n${pdfPath}`,
+          'o aviso do PDF',
+        );
       }
     }
   } finally {
@@ -233,7 +304,6 @@ export async function enviarWhatsAppDeErro(stage, error) {
         `Detalhes em state.json (lastError) e em logs/.`,
       'o aviso de falha',
     );
-    log.info('WhatsApp: aviso de falha enviado.');
   } finally {
     ready.cancel();
     await client.destroy().catch(() => {});
