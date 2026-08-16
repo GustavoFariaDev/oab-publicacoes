@@ -165,14 +165,26 @@ function chavesLocais(comarca = '') {
 }
 
 /**
+ * Sabado ou domingo.
+ *
+ * Separado de ehDiaUtil porque responde outra pergunta: nao "conta prazo?", e
+ * sim "o Diario circula?". Feriado e recesso sao dia sem prazo mas com
+ * publicacao possivel; fim de semana nao tem nem uma coisa nem outra, e e o
+ * unico caso em que vale nem ligar o robo (ver src/index.js).
+ */
+export function ehFimDeSemana(d) {
+  const semana = d.getUTCDay();
+  return semana === 0 || semana === 6;
+}
+
+/**
  * Dia util para fim de prazo: nao e fim de semana, feriado nem recesso.
  *
  * `comarca` muda o resultado so quando ha feriado municipal configurado para
  * ela — o aniversario da cidade nao suspende expediente na comarca vizinha.
  */
 export function ehDiaUtil(d, comarca = '') {
-  const semana = d.getUTCDay();
-  if (semana === 0 || semana === 6) return false;
+  if (ehFimDeSemana(d)) return false;
   if (feriados(d.getUTCFullYear()).has(chave(d))) return false;
   if (chavesLocais(comarca).has(chave(d))) return false;
   return !emRecesso(d);

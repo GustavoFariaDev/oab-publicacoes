@@ -20,11 +20,22 @@
  */
 import { config, todayBR, todayISO } from '../src/config.js';
 import { log } from '../src/log.js';
+import { deBR, ehFimDeSemana } from '../src/prazo.js';
 import { diagnosticarDia } from '../src/saude.js';
 import { enviarEmailDeErro } from '../src/mailer.js';
 import { enviarWhatsAppDeErro } from '../src/whatsapp.js';
 
 const dataISO = todayISO();
+
+// No fim de semana o robo nao roda de proposito (ver src/index.js). Sem esta
+// saida, o vigia acharia todo sabado e domingo um dia que "nao fechou" e
+// mandaria dois alertas por semana sobre uma ausencia planejada — que e
+// exatamente o tipo de aviso que ensina a ignorar aviso.
+const hoje = deBR(dataISO);
+if (hoje && ehFimDeSemana(hoje)) {
+  log.info(`Checagem de ${todayBR()}: fim de semana, o robo nao roda. Nada a conferir.`);
+  process.exit(0);
+}
 const { ok, problemas } = diagnosticarDia(dataISO);
 
 if (ok) {

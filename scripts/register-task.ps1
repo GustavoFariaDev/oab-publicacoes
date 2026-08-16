@@ -64,7 +64,13 @@ function Register-OabTask {
         -Argument $Arguments `
         -WorkingDirectory $LinkPath
 
-    $Trigger = New-ScheduledTaskTrigger -Daily -At $Time
+    # Segunda a sexta so. O Diario nao circula no fim de semana, e -WakeToRun
+    # faria a maquina acordar sabado e domingo para nao colher nada. O corte
+    # tambem existe no codigo (src/index.js), porque tarefa registrada ha meses
+    # nao se corrige sozinha — aqui e para nao acordar o PC a toa.
+    $Trigger = New-ScheduledTaskTrigger -Weekly `
+        -DaysOfWeek Monday, Tuesday, Wednesday, Thursday, Friday `
+        -At $Time
 
     if (Get-ScheduledTask -TaskName $Name -ErrorAction SilentlyContinue) {
         Unregister-ScheduledTask -TaskName $Name -Confirm:$false

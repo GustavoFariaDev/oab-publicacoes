@@ -1,5 +1,5 @@
 import { brToISO, config, isDryRun, targetDateBR } from './config.js';
-import { deBR, ehDiaUtil } from './prazo.js';
+import { deBR, ehDiaUtil, ehFimDeSemana } from './prazo.js';
 import { log } from './log.js';
 import { coletar } from './coletar.js';
 import { gerarPDF } from './pdf.js';
@@ -87,6 +87,23 @@ async function main() {
   }
 
   log.info(`=== OAB publicacoes — ${dataBR}${dry ? ' (DRY RUN)' : ''} ===`);
+
+  // Sabado e domingo o Diario nao circula: a API devolve zero (conferido em 08 e
+  // 09/08/2026) e o portal repete o ultimo dia util. Antes o run ia ate o fim e
+  // so segurava o envio la embaixo; agora nem comeca — abrir Chrome, passar pela
+  // Cloudflare e acordar a maquina duas vezes no fim de semana (14h, 16h, 17h)
+  // era trabalho para colher nada, e todo run e uma chance a mais de a sessao do
+  // portal ou do zap quebrar sozinha.
+  //
+  // Duas escapatorias de proposito: --dry (ferramenta de teste, tem que rodar
+  // quando eu mandar) e --data= explicito (se eu peco um sabado nominalmente, e
+  // porque quero conferir aquele sabado).
+  const dataExplicita = process.argv.some((a) => a.startsWith('--data='));
+  const alvo = deBR(dataBR);
+  if (!dry && !dataExplicita && alvo && ehFimDeSemana(alvo)) {
+    log.info(`${dataBR} e fim de semana — o Diario nao publica. Nada a fazer.`);
+    return;
+  }
 
   try {
     stage = 'coleta';

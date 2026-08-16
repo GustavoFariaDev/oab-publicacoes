@@ -3,7 +3,7 @@
 [![Node](https://img.shields.io/badge/node-%E2%89%A522-brightgreen)](https://nodejs.org)
 [![Licença](https://img.shields.io/badge/licen%C3%A7a-MIT-blue)](LICENSE)
 
-Todo dia às 14h, consulta as publicações do Diário da Justiça pela inscrição da OAB e manda o resultado por WhatsApp e e-mail, com PDF do inteiro teor anexo — e as datas de prazo já contadas.
+De segunda a sexta, às 14h, consulta as publicações do Diário da Justiça pela inscrição da OAB e manda o resultado por WhatsApp e e-mail, com PDF do inteiro teor anexo — e as datas de prazo já contadas.
 
 O objetivo não é "automatizar uma consulta". É que **uma publicação não passada é prazo perdido**, e conferir o diário à mão todo dia é justamente o tipo de tarefa que falha no dia em que você está ocupado. Por isso cada decisão aqui assume que o erro é assimétrico: uma publicação repetida é chateação, uma publicação faltando é dano.
 
@@ -13,7 +13,7 @@ O objetivo não é "automatizar uma consulta". É que **uma publicação não pa
 
 ```mermaid
 flowchart TD
-    T["14h — Agendador do Windows"] --> C{Coleta}
+    T["14h, seg–sex — Agendador do Windows"] --> C{Coleta}
     C --> CNJ["API do CNJ (DJEN)<br/>pública, sem login"]
     C --> P["Portal da OAB SP<br/>Chrome autenticado"]
     CNJ --> U["União + dedupe<br/>conservador entre fontes"]
@@ -139,7 +139,7 @@ Pendências e prioridade em **[docs/PENDENCIAS.md](docs/PENDENCIAS.md)**.
 
 - **O robô não sabe de quem é o prazo.** A regra do prazo único evita o caso ruidoso, mas um ato com prazo único dirigido ao perito ainda sai como se fosse seu. Só leitura humana resolve.
 - **`whatsapp-web.js` devolve vazio no `sendMessage()`** contra o WhatsApp Web 2.3000, e `getChats()`/`getChatById()` estouram com erro minificado. A confirmação vem do evento `message_ack`, que continua funcionando — o envio só é dado por feito com ack ≥ 1 (servidor recebeu). Sem ack, o canal fica pendente e o retry tenta de novo.
-- **Sábado, domingo e feriado não geram mensagem** quando não há publicação — são dias em que o diário não circula, e avisar "nada hoje" 104 vezes por ano é o jeito mais rápido de ensinar alguém a ignorar o alerta. Publicação que apareça num sábado sai normalmente.
+- **Sábado e domingo o robô não roda.** O diário não circula, e as tarefas são de segunda a sexta — nem o Chrome abre, nem a máquina acorda. Feriado ainda roda (não há lista confiável de feriado forense), mas não gera mensagem quando vem zero publicação: avisar "nada hoje" 104 vezes por ano é o jeito mais rápido de ensinar alguém a ignorar o alerta. Se quiser conferir um fim de semana à mão, `npm run once -- --data=16/08/2026` continua funcionando.
 - **PC desligado às 14h** = risco de perder o dia. A tarefa tem "executar assim que possível se perdida", o que cobre ligar mais tarde no mesmo dia.
 - **A checagem das 18h mora na mesma máquina que ela vigia.** Cobre falha de parte; falha total (PC fora o dia inteiro, todos os canais mortos) só um vigia externo cobriria.
 - **A API do CNJ limita requisição sem documentar o limite** e recusa IP fora do Brasil (HTTP 403).

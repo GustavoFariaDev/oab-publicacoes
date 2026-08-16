@@ -1,6 +1,6 @@
 # Automação OAB SP — Publicações do dia
 
-Robô que, **todo dia às 14h**, entra no portal da OAB SP, consulta as publicações do Diário da Justiça **do dia corrente** e manda por **e-mail** e **WhatsApp**.
+Robô que, **de segunda a sexta, às 14h**, entra no portal da OAB SP, consulta as publicações do Diário da Justiça **do dia corrente** e manda por **e-mail** e **WhatsApp**.
 
 - **Conta / destinos:** vêm do `.env` (`OAB_NUMERO`, `MAIL_TO`, `WHATSAPP_TO`) — nunca versionados
 - **Portal:** https://www2.oabsp.org.br → *Histórico → Publicações por Data*
@@ -26,7 +26,9 @@ Perder uma publicação é perder prazo processual. A conferência manual é di�
 9. Anota no `state.json` o que já foi enviado, por qual canal, e se as fontes vieram inteiras.
 10. Às 18h, confere se o dia fechou — e só fala se não fechou.
 
-Se não houver publicação num **dia útil**, ele **avisa mesmo assim** ("nenhuma publicação hoje"): silêncio num dia de expediente seria ambíguo. Já em sábado, domingo e feriado ele não manda nada — o diário não circula, e avisar "nada hoje" 104 vezes por ano ensina a ignorar o alerta. Quem fecha essa conta é a checagem das 18h, que fala quando o dia deveria ter fechado e não fechou.
+Se não houver publicação num **dia útil**, ele **avisa mesmo assim** ("nenhuma publicação hoje"): silêncio num dia de expediente seria ambíguo. Quem fecha essa conta é a checagem das 18h, que fala quando o dia deveria ter fechado e não fechou.
+
+**Sábado e domingo ele não roda** (16/08/2026): as tarefas do Agendador são de segunda a sexta e o `src/index.js` sai antes da coleta se cair num fim de semana — a checagem das 18h também. O diário não circula nesses dias (a API devolve zero, o portal repete o último dia útil), então o run inteiro era Chrome abrindo, Cloudflare e a máquina acordando para colher nada, três vezes por dia. **Feriado continua rodando**, porque não existe lista confiável de feriado forense e um "feriado" errado engoliria um dia de publicação de verdade; nesses dias ele só não manda mensagem quando vem zero publicação. Para conferir um fim de semana à mão: `npm run once -- --data=16/08/2026` (data explícita e `--dry` passam pelo corte).
 
 ---
 
@@ -177,7 +179,7 @@ npm run register-task
 
 ## Agendamento
 
-Tarefa diária às **14:00** no Agendador de Tarefas do Windows, com "executar assim que possível se a execução for perdida" — se o PC estiver desligado às 14h e você ligar às 16h, ele roda.
+Tarefa às **14:00, de segunda a sexta**, no Agendador de Tarefas do Windows, com "executar assim que possível se a execução for perdida" — se o PC estiver desligado às 14h e você ligar às 16h, ele roda. Depois de mudar isso, rode `npm run register-task` de novo: tarefa já registrada continua diária até ser reescrita.
 
 **Retries condicionais às 16h e 17h.** Não sabemos ainda se às 14h a publicação do dia já está sempre completa no portal (isso vai ser observado nos primeiros dias). Até ter certeza, existem duas passadas extras. Elas não fazem nada se o dia estiver **resolvido**, e um dia só está resolvido quando as quatro coisas valem:
 
