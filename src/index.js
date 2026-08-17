@@ -241,35 +241,67 @@ async function processarDia(dataBR, dry) {
  * que nao chegar: o prazo conta da disponibilizacao.
  */
 async function revisarDia(dataBR, dry) {
-  const { dataISO, novas, completo, registro } = await pendentesDoDia(dataBR);
+  const { dataISO, publicacoes, novas, completo, registro } = await pendentesDoDia(dataBR, {
+    dedupe: !dry,
+  });
 
-  if (!novas.length) {
+  // Canal que ficou para tras num complemento ANTERIOR desta mesma revisao: os
+  // ids ja foram gravados, entao "novas" vem vazia, mas aquele canal nunca
+  // recebeu. Sem este resgate, um zap com a sessao expirada as 14h perderia o
+  // complemento de vez, porque as 16h nao haveria mais nada "novo" a achar.
+  //
+  // So vale para dia que JA passou por revisao (revisadoEm). Dia comum que
+  // terminou com canal pendente e assunto do retry das 16h/17h, e alarga-lo
+  // para ca faria a revisao reenviar dia inteiro por conta propria.
+  const entregues = canaisEntregues(registro);
+  const atrasados = registro?.revisadoEm
+    ? [...config.canais].filter((c) => !entregues.has(c))
+    : [];
+
+  if (!novas.length && !atrasados.length) {
     log.info(`Revisao de ${dataBR}: nada ficou para tras na API do CNJ.`);
     return;
   }
 
-  const quantas = `${novas.length} publicacao(oes)`;
+  // Mesma regra do dia corrente: canal atrasado precisa do dia INTEIRO, nao do
+  // delta, porque nao ha registro de qual publicacao foi por qual canal.
+  const aEnviar = atrasados.length ? publicacoes : novas;
+  const alvos = novas.length ? [...config.canais] : atrasados;
+  const quantas = `${aEnviar.length} publicacao(oes)`;
+
   log.warn(
-    registro
-      ? `Revisao de ${dataBR}: ${quantas} entraram no DJEN depois do envio daquele dia.`
-      : `Revisao de ${dataBR}: ${quantas} e o dia nao tem registro de envio nenhum.`,
+    !novas.length
+      ? `Revisao de ${dataBR}: reenviando o dia para ${atrasados.join(', ')} — ficou para tras num complemento anterior.`
+      : registro
+        ? `Revisao de ${dataBR}: ${quantas} entraram no DJEN depois do envio daquele dia.`
+        : `Revisao de ${dataBR}: ${quantas} e o dia nao tem registro de envio nenhum.`,
   );
 
+  // O aviso muda com o caso, e a diferenca importa: "entraram depois" diz que o
+  // dia foi tratado e estas sao retardatarias; num dia que o robo nunca rodou a
+  // verdade e o oposto — NADA daquele dia foi conferido, portal inclusive —, e
+  // ler a primeira frase ali afastaria o leitor justamente da conferencia a mao
+  // que o dia inteiro esta pedindo.
+  const ressalva =
+    `Só a API do CNJ (DJEN) foi reconferida: publicação que exista apenas nos diários de MG ` +
+    `ou da União não entra nesta conferência.`;
   const avisos = [
-    `REVISÃO DE ${dataBR}: ${novas.length} publicação(ões) daquele dia não tinham sido enviadas — ` +
-      `entraram no diário depois do último envio. Só a API do CNJ (DJEN) foi reconferida: ` +
-      `publicação que exista apenas nos diários de MG ou da União não entra nesta conferência, ` +
-      `confira o portal da OAB se o dia for crítico.`,
+    registro
+      ? `REVISÃO DE ${dataBR}: ${aEnviar.length} publicação(ões) daquele dia não tinham sido ` +
+        `enviadas — entraram no diário depois do último envio. ${ressalva}`
+      : `REVISÃO DE ${dataBR}: o robô NÃO RODOU naquele dia — nada dele tinha sido conferido. ` +
+        `Abaixo o que a API do CNJ tem para a data. ${ressalva} ` +
+        `Confira o portal da OAB manualmente para este dia.`,
   ];
   // esperado/extraido descrevem ESTE lote, nao o dia: o numero cheio do dia
   // mora no state.json e a revisao nao o recalcula (ver recordComplemento).
   const envio = {
     dataBR,
-    publicacoes: novas,
+    publicacoes: aEnviar,
     avisos,
     complemento: true,
-    esperado: novas.length,
-    extraido: novas.length,
+    esperado: aEnviar.length,
+    extraido: aEnviar.length,
   };
 
   const pdfPath = await gerarPDF(envio);
@@ -278,30 +310,46 @@ async function revisarDia(dataBR, dry) {
     return;
   }
 
+  // Parte do "entregues" que ja havia e mexe a partir dele: quem entregou entra,
+  // quem falhou SAI mesmo se ja estava la — o canal deixou de estar em dia com
+  // este dia, e e isso que traz a revisao de volta nele amanha.
   const falhas = [];
-  for (const canal of config.canais) {
+  for (const canal of alvos) {
     try {
       await ENVIAR[canal]({ ...envio, pdfPath });
+      entregues.add(canal);
     } catch (e) {
       log.warn(`Revisao de ${dataBR}: canal "${canal}" falhou —`, e.message);
+      entregues.delete(canal);
       falhas.push([canal, e]);
     }
   }
 
-  // Entrega parcial NAO grava os ids. Sem isso a publicacao ficaria marcada
-  // como resolvida e o canal que falhou nunca a receberia — e o retry das
-  // 16h/17h so tem como reconferir o que continua pendente. O preco e repetir
-  // no canal que ja recebeu, que e a troca de sempre: duplicata e chateacao,
-  // publicacao faltando e prazo.
-  if (falhas.length) {
+  const entregou = alvos.some((c) => entregues.has(c));
+  // Nenhum canal saiu: nao grava id nenhum. Gravar aqui marcaria a publicacao
+  // como resolvida sem ela ter chegado a lugar nenhum.
+  if (!entregou) {
     const motivo = falhas.map(([c, e]) => `${c}: ${e.message}`).join(' | ');
-    log.warn(`Revisao de ${dataBR} nao saiu por todos os canais — sera tentada de novo.`);
-    recordError('revisao', new Error(`Revisao de ${dataBR} incompleta — ${motivo}`));
+    log.warn(`Revisao de ${dataBR} nao saiu por canal nenhum — sera tentada de novo.`);
+    recordError('revisao', new Error(`Revisao de ${dataBR} nao saiu — ${motivo}`), {
+      preservar: true,
+    });
     return;
   }
 
-  recordComplemento(dataISO, { publicacoes: novas, completo });
-  log.info(`Revisao de ${dataBR}: ${quantas} enviadas e registradas.`);
+  // Saiu por alguem: grava os ids (senao o proximo run reenviaria tudo do zero)
+  // e, junto, quais canais estao mesmo em dia. O canal que falhou fica de fora
+  // dessa lista, e e por ela que o resgate la em cima o encontra no proximo run.
+  recordComplemento(dataISO, { publicacoes: aEnviar, completo, entregues });
+  log.info(`Revisao de ${dataBR}: ${quantas} enviadas por ${[...entregues].join(', ')}.`);
+
+  if (falhas.length) {
+    const motivo = falhas.map(([c, e]) => `${c}: ${e.message}`).join(' | ');
+    log.warn(`Revisao de ${dataBR}: falta ${falhas.map(([c]) => c).join(', ')} — volta no proximo run.`);
+    recordError('revisao', new Error(`Revisao de ${dataBR} incompleta — ${motivo}`), {
+      preservar: true,
+    });
+  }
 }
 
 /**
@@ -312,21 +360,35 @@ async function revisarDia(dataBR, dry) {
  * exploda, nao pode derrubar o run — o dia de hoje vale mais que a conferencia
  * de ontem. Cada dia em try proprio pelo mesmo motivo.
  */
-async function revisarAnteriores(dataBR, dry) {
-  const dias = diasParaRevisar(dataBR);
-  if (!dias.length) return;
+async function revisarAnteriores(dataBR, dry, havia) {
+  // Fora do laco mas dentro do try: config.revisaoDias e um getter que ESTOURA
+  // se REVISAO_DIAS vier invalido, e main() nao tem catch. Sem isto, "1.5" no
+  // .env mataria o processo depois de o dia ja ter saido — sem recordError, sem
+  // aviso, sem nada em state.json explicando.
+  try {
+    const dias = diasParaRevisar(dataBR);
+    if (!dias.length) return;
 
-  if (!temHistorico()) {
-    log.info('Revisao: nao ha dia registrado ainda — sem passado para conferir.');
-    return;
-  }
-
-  for (const dia of dias) {
-    try {
-      await revisarDia(dia, dry);
-    } catch (e) {
-      log.warn(`Revisao de ${dia} falhou (${e.message}) — sera tentada no proximo run.`);
+    // "havia" e medido ANTES de o dia corrente rodar. Medir aqui nao serviria de
+    // nada: processarDia acabou de gravar hoje no state.json, entao o historico
+    // estaria sempre cheio e a porta nunca fecharia — que era justamente o caso
+    // que ela existe para barrar (primeiro run numa maquina limpa, ou depois de
+    // um state.json perdido, despejando o dia anterior inteiro como novidade).
+    if (!havia) {
+      log.info('Revisao: nao havia dia registrado no inicio do run — sem passado para conferir.');
+      return;
     }
+
+    for (const dia of dias) {
+      try {
+        await revisarDia(dia, dry);
+      } catch (e) {
+        log.warn(`Revisao de ${dia} falhou (${e.message}) — sera tentada no proximo run.`);
+      }
+    }
+  } catch (e) {
+    log.error('Revisao nao pode nem comecar:', e.message);
+    if (!dry) recordError('revisao', e, { preservar: true });
   }
 }
 
@@ -362,6 +424,9 @@ async function main() {
     return;
   }
 
+  // Medido aqui, antes de processarDia gravar o dia de hoje — ver revisarAnteriores.
+  const havia = temHistorico();
+
   await processarDia(dataBR, dry);
 
   // Depois, nunca antes. Tres razoes, todas de ordem:
@@ -373,7 +438,7 @@ async function main() {
   //   3. --data= explicito e pedido pontual daquela data: revisar a vespera
   //      dela seria efeito colateral que ninguem pediu.
   if (!dataExplicita) {
-    await revisarAnteriores(dataBR, dry);
+    await revisarAnteriores(dataBR, dry, havia);
   }
 }
 

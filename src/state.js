@@ -131,37 +131,51 @@ export function recordSuccess(dateISO, { esperado, extraido, publicacoes, comple
  *     3 faria o dia parecer que encolheu, e diagnosticarDia passaria a acusar
  *     "coletadas 3 de 5" para sempre. Os dois sobem juntos pelo tanto que
  *     entrou, que e o unico numero que a revisao sabe de verdade;
+ *   - nao preserva o enviadoEm original. Ele e o registro de auditoria de
+ *     quando o dia saiu de verdade; carimbar por cima com a hora da revisao
+ *     apagaria isso;
  *   - nao promove `completo` a true. Se o portal caiu naquele dia, ele continua
  *     caido — uma conferencia que nao olhou o portal nao tem como absolver o
- *     portal. So um dia SEM registro nenhum recebe a opiniao da revisao;
+ *     portal. E um dia que a REVISAO criou do zero (o robo nao rodou naquele
+ *     dia) nasce incompleto quando o portal esta ligado, pelo mesmo motivo: o
+ *     portal nunca foi consultado para ele, e so um dia em aberto e reconferido;
  *   - nao mexe em lastError. A revisao roda depois do dia corrente, e limpar o
  *     erro dele aqui esconderia justamente o que o retry das 16h/17h precisa ler.
  *
- * So e chamada quando TODOS os canais entregaram o complemento (ver
- * src/index.js): gravar id que saiu pela metade faria a proxima revisao
- * considerar a publicacao resolvida e o canal que falhou nunca receberia.
- *
  * @param {boolean} completo  opiniao da revisao, usada so se o dia nao tem registro
+ * @param {Set<string>|string[]} entregues  canais que estao em dia com este
+ *   dia DEPOIS deste envio — calculado por quem chama, como no recordSuccess.
+ *   Nao e uniao com o que ja havia: se o complemento saiu so por e-mail, o
+ *   WhatsApp deixou de estar em dia com este dia, e e esse "menos" que faz a
+ *   proxima revisao voltar nele.
  */
-export function recordComplemento(dateISO, { publicacoes, completo }) {
+export function recordComplemento(dateISO, { publicacoes, completo, entregues }) {
   const state = load();
   const anterior = state.days[dateISO] ?? null;
-  const previous = anterior?.ids ?? [];
-  const ids = [...new Set([...previous, ...publicacoes.flatMap(publicationIds)])];
-  const novos = ids.length - previous.length;
+  const conhecidos = new Set(anterior?.ids ?? []);
+
+  // Conta PUBLICACAO, nao identificador. publicationIds devolve um id por fonte
+  // que conheceu a publicacao: subtrair o tamanho das listas faria uma unica
+  // publicacao vista por duas fontes somar 2, e esperado/extraido inflariam
+  // para sempre. E, no outro sentido, duas intimacoes distintas do mesmo
+  // processo sem id nenhum colapsam no mesmo fallback processo|data (o caso do
+  // TRT2 descrito em merge.js) e somariam 1 tendo ido 2.
+  let novos = 0;
+  for (const pub of publicacoes) {
+    const ids = publicationIds(pub);
+    if (ids.some((id) => !conhecidos.has(id))) novos++;
+    for (const id of ids) conhecidos.add(id);
+  }
 
   state.days[dateISO] = {
     ...anterior,
     esperado: (anterior?.esperado ?? 0) + novos,
     extraido: (anterior?.extraido ?? 0) + novos,
-    completo: anterior ? anterior.completo : completo,
-    // Uniao, nao substituicao: se CANAIS encolheu desde aquele dia, o canal que
-    // saiu da configuracao ainda recebeu o lote original, e apagar isso do
-    // registro reescreveria o passado.
-    canaisEntregues: [...new Set([...(anterior?.canaisEntregues ?? []), ...config.canais])],
-    enviadoEm: new Date().toISOString(),
+    completo: anterior ? anterior.completo : completo && !config.portalHabilitado,
+    canaisEntregues: [...entregues],
+    enviadoEm: anterior?.enviadoEm ?? new Date().toISOString(),
     revisadoEm: new Date().toISOString(),
-    ids,
+    ids: [...conhecidos],
   };
   save(state);
 }
@@ -169,13 +183,21 @@ export function recordComplemento(dateISO, { publicacoes, completo }) {
 /**
  * Registra a falha com a etapa em que ocorreu. Como a tarefa roda sem terminal,
  * este campo e o principal diagnostico depois do fato.
+ *
+ * `preservar` junta a mensagem a que ja estava la em vez de trocar. lastError e
+ * UM slot, e a revisao roda depois do dia corrente: sem isso, uma revisao que
+ * falhasse apagaria o "canal whatsapp caiu" que o run das 14h acabou de gravar,
+ * e as 16h ninguem saberia que o dia de hoje ficou pela metade. Mesmo motivo do
+ * registrarPendencias juntar os dois motivos numa chamada so.
  */
-export function recordError(stage, error) {
+export function recordError(stage, error, { preservar = false } = {}) {
   const state = load();
+  const anterior = preservar ? state.lastError : null;
+  const message = error?.message ?? String(error);
   state.lastError = {
     at: new Date().toISOString(),
-    stage,
-    message: error?.message ?? String(error),
+    stage: anterior ? `${anterior.stage}+${stage}` : stage,
+    message: anterior ? `${anterior.message} | ${message}` : message,
   };
   save(state);
 }

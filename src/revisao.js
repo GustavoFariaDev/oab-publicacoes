@@ -81,15 +81,26 @@ export function temHistorico() {
  * TODOS os identificadores ja registrados, entao publicacao que saiu pelo id do
  * portal nao volta aqui so por ter chegado agora com o id do CNJ.
  *
+ * @param {boolean} [opcoes.dedupe]  false devolve tudo em `novas`, sem olhar o
+ *   estado. E o que o --dry precisa: com o dedupe ligado a revisao quase sempre
+ *   diz "nada ficou para tras" e o caminho de envio nunca aparece no teste a
+ *   mao — a mesma razao pela qual o dry run do dia corrente ignora o dedupe.
  * @returns {Promise<{dataBR: string, dataISO: string, publicacoes: object[],
  *   novas: object[], completo: boolean, registro: object|null}>}
  */
-export async function pendentesDoDia(dataBR) {
+export async function pendentesDoDia(dataBR, { dedupe = true } = {}) {
   const dataISO = brToISO(dataBR);
+  const registro = dayRecord(dataISO);
   const cnj = await buscarNoCNJ(dataBR, {
     numeroOab: config.oab.numero,
     ufOab: config.oab.uf,
-    diaUtil: ehDiaUtil(deBR(dataBR)),
+    // A varredura das 6 variantes de sufixo dispara quando a base vem vazia num
+    // dia util (ver src/sources/cnj.js) — 6 consultas e ~9s a mais, tres vezes
+    // por dia. Num dia que JA foi entregue isso nao compra nada: base vazia ali
+    // so confirma o que o estado ja sabe, e o preco e risco de HTTP 429 na
+    // fonte de que o dia corrente depende. Vale so no dia que nunca saiu, onde
+    // "zero" pode mesmo ser publicacao gravada com sufixo.
+    diaUtil: !registro && ehDiaUtil(deBR(dataBR)),
   });
 
   // Passa pelo unir() mesmo com uma fonte so: e ele que monta o campo
@@ -100,8 +111,8 @@ export async function pendentesDoDia(dataBR) {
     dataBR,
     dataISO,
     publicacoes,
-    novas: filterNew(dataISO, publicacoes),
+    novas: dedupe ? filterNew(dataISO, publicacoes) : publicacoes,
     completo: cnj.completo,
-    registro: dayRecord(dataISO),
+    registro,
   };
 }

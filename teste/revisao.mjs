@@ -13,6 +13,9 @@ import path from 'node:path';
 const arquivo = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'oab-teste-')), 'state.json');
 process.env.STATE_PATH = arquivo;
 process.env.CANAIS = 'whatsapp,email';
+// Portal ligado: e a configuracao de producao, e ela muda o que a revisao pode
+// afirmar sobre um dia que ela mesma criou (ver recordComplemento).
+process.env.PORTAL = '1';
 // Sem feriado de configuracao: a lista de dias tem que sair da regra, nao do
 // .env de quem roda o teste.
 process.env.FERIADOS_EXTRA = '';
@@ -74,19 +77,45 @@ eq('com um dia gravado -> ha historico', temHistorico(), true);
 
 // --- Complemento: o caso que motivou tudo ---
 // 14/08 saiu com 5; a revisao do dia seguinte acha a 6a na API.
-recordComplemento('2026-08-14', { publicacoes: [pub('f')], completo: true });
+const TODOS = new Set(['whatsapp', 'email']);
 const d14 = () => ler().days['2026-08-14'];
+const enviadoOriginal = d14().enviadoEm;
+recordComplemento('2026-08-14', { publicacoes: [pub('f')], completo: true, entregues: TODOS });
 eq('id novo entra na lista', d14().ids.includes('f'), true);
 eq('ids nao se perdem', d14().ids.length, 6);
 eq('esperado sobe junto', d14().esperado, 6);
 eq('extraido sobe junto', d14().extraido, 6);
 eq('marca quando foi revisado', Boolean(d14().revisadoEm), true);
+// enviadoEm e a auditoria de quando o dia saiu de verdade. A revisao acontece
+// no dia seguinte; carimbar por cima apagaria o unico registro disso.
+eq('enviadoEm original e preservado', d14().enviadoEm, enviadoOriginal);
 
 // Rodar de novo com a MESMA publicacao nao pode inflar a contagem: o id ja esta
 // la, entao nao entrou nada.
-recordComplemento('2026-08-14', { publicacoes: [pub('f')], completo: true });
+recordComplemento('2026-08-14', { publicacoes: [pub('f')], completo: true, entregues: TODOS });
 eq('complemento repetido nao infla esperado', d14().esperado, 6);
 eq('complemento repetido nao infla ids', d14().ids.length, 6);
+
+// Uma publicacao vista por DUAS fontes carrega dois ids. A contagem tem que
+// somar 1 — ela e uma publicacao so.
+recordComplemento('2026-08-14', {
+  publicacoes: [{ ...pub('h'), identificadores: { CNJ: 'h', Portal: 'h2' } }],
+  completo: true,
+  entregues: TODOS,
+});
+eq('publicacao com dois ids conta 1, nao 2', d14().esperado, 7);
+eq('mas os dois ids ficam guardados', d14().ids.length, 8);
+
+// --- Canal atrasado fica registrado como atrasado ---
+// Complemento que saiu so por e-mail: o WhatsApp deixou de estar em dia com o
+// dia, e e por essa lista que o proximo run sabe que precisa voltar nele.
+recordComplemento('2026-08-14', {
+  publicacoes: [pub('i')],
+  completo: true,
+  entregues: new Set(['email']),
+});
+eq('canal que falhou sai da lista', d14().canaisEntregues, ['email']);
+eq('mas os ids foram gravados (nao reenvia tudo do zero)', d14().ids.includes('i'), true);
 
 // --- O que o complemento NAO pode reescrever ---
 // Dia fechado com o portal caido: uma revisao que so olhou a API do CNJ nao tem
@@ -98,24 +127,45 @@ recordSuccess('2026-08-13', {
   completo: false,
   entregues: new Set(['whatsapp', 'email']),
 });
-recordComplemento('2026-08-13', { publicacoes: [pub('y', '999', '13/08/2026')], completo: true });
+recordComplemento('2026-08-13', {
+  publicacoes: [pub('y', '999', '13/08/2026')],
+  completo: true,
+  entregues: TODOS,
+});
 eq('nao promove "completo" de um dia que ja tinha registro', ler().days['2026-08-13'].completo, false);
 
-// Dia SEM registro nenhum (o robo nao rodou): ai sim vale a opiniao da revisao.
-recordComplemento('2026-08-12', { publicacoes: [pub('z', '888', '12/08/2026')], completo: false });
-eq('dia sem registro herda o "completo" da revisao', ler().days['2026-08-12'].completo, false);
+// Dia SEM registro nenhum (o robo nao rodou naquele dia): a revisao cria o
+// registro, e com o portal LIGADO ele nasce incompleto — o portal nunca foi
+// consultado para aquela data, e so dia em aberto volta a ser conferido.
+recordComplemento('2026-08-12', {
+  publicacoes: [pub('z', '888', '12/08/2026')],
+  completo: true,
+  entregues: TODOS,
+});
+eq('dia criado pela revisao com portal ligado nasce incompleto', ler().days['2026-08-12'].completo, false);
 eq('dia sem registro nasce com a contagem do lote', ler().days['2026-08-12'].extraido, 1);
 eq(
-  'dia sem registro registra os canais',
+  'dia sem registro registra os canais que receberam',
   ler().days['2026-08-12'].canaisEntregues.sort(),
   ['email', 'whatsapp'],
 );
+eq('dia sem registro ganha enviadoEm', Boolean(ler().days['2026-08-12'].enviadoEm), true);
 
 // lastError e do dia corrente e roda ANTES da revisao. Se o complemento o
 // limpasse, o retry das 16h nao saberia que ficou servico.
 recordError('envio', new Error('zap caiu hoje'));
-recordComplemento('2026-08-14', { publicacoes: [pub('g')], completo: true });
+recordComplemento('2026-08-14', { publicacoes: [pub('g')], completo: true, entregues: TODOS });
 eq('complemento NAO limpa o lastError', ler().lastError?.stage, 'envio');
+
+// E o erro da revisao nao pode apagar o do dia corrente: e um slot so, e quem
+// le o state.json as 16h precisa dos dois motivos.
+recordError('revisao', new Error('revisao tambem falhou'), { preservar: true });
+eq('erro da revisao junta com o do dia', ler().lastError.stage, 'envio+revisao');
+eq(
+  'e as duas mensagens sobrevivem',
+  ler().lastError.message,
+  'zap caiu hoje | revisao tambem falhou',
+);
 
 console.log(`\n${ok} ok, ${mal} falha(s)`);
 process.exitCode = mal ? 1 : 0;
