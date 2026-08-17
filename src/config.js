@@ -72,6 +72,26 @@ export const config = {
     return new Set(lista);
   },
 
+  /**
+   * Quantos dias uteis para tras a revisao reconfere na API do CNJ antes de
+   * cuidar do dia corrente (ver src/revisao.js). 0 desliga.
+   *
+   * O padrao e 1 — o dia util anterior — porque e ele que pode ter recebido
+   * publicacao depois do ultimo retry das 17h. Numeros maiores custam uma
+   * consulta a mais por dia cada um (e mais risco de 429), e so pagam se a
+   * maquina tiver ficado dias desligada; nesse caso vale subir por uns dias e
+   * voltar ao padrao.
+   */
+  get revisaoDias() {
+    const raw = process.env.REVISAO_DIAS;
+    if (raw === undefined || raw.trim() === '') return 1;
+    const n = Number(raw);
+    if (!Number.isInteger(n) || n < 0 || n > 10) {
+      throw new Error(`REVISAO_DIAS invalido: "${raw}". Use um inteiro de 0 a 10.`);
+    }
+    return n;
+  },
+
   // Varre as variantes de sufixo da inscricao (123456-O, -A, ...) em TODA
   // execucao. Custa 6 consultas extras e o risco de HTTP 429 na API do CNJ, e
   // nesta inscricao nenhuma delas devolveu nada — por isso o padrao e desligado

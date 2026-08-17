@@ -5,11 +5,13 @@ import { coletar } from './coletar.js';
 import { gerarPDF } from './pdf.js';
 import { enviarEmail, enviarEmailDeErro } from './mailer.js';
 import { enviarWhatsApp, enviarWhatsAppDeErro } from './whatsapp.js';
+import { diasParaRevisar, pendentesDoDia, temHistorico } from './revisao.js';
 import {
   canaisEntregues,
   dayRecord,
   filterNew,
   isDayComplete,
+  recordComplemento,
   recordError,
   recordSuccess,
 } from './state.js';
@@ -55,19 +57,14 @@ function registrarPendencias(coleta, falhasCanal) {
 }
 
 /**
- * Orquestrador: scrape -> PDF -> e-mail -> WhatsApp -> estado.
+ * Um dia: scrape -> PDF -> e-mail -> WhatsApp -> estado.
  *
- * Flags:
- *   --dry              gera os arquivos em out/ e nao envia nada
- *   --data=dd/mm/aaaa  consulta outra data (padrao: hoje)
- *   --retry            no-op so se o dia estiver inteiramente resolvido
- *                      (ver isDayComplete: saiu, por todos os canais, com
- *                      todas as fontes de pe)
+ * Nunca relanca: o que quebra vira lastError, aviso pelos canais e
+ * process.exitCode = 1. E de proposito — a revisao do dia anterior roda depois
+ * desta, e um dia corrente que falhou nao pode impedir a conferencia de ontem.
  */
-async function main() {
-  const dataBR = targetDateBR();
+async function processarDia(dataBR, dry) {
   const dataISO = brToISO(dataBR);
-  const dry = isDryRun();
   let stage = 'inicio';
 
   // ATENCAO ao mexer aqui: o --retry NAO pode desistir antes de coletar.
@@ -87,23 +84,6 @@ async function main() {
   }
 
   log.info(`=== OAB publicacoes — ${dataBR}${dry ? ' (DRY RUN)' : ''} ===`);
-
-  // Sabado e domingo o Diario nao circula: a API devolve zero (conferido em 08 e
-  // 09/08/2026) e o portal repete o ultimo dia util. Antes o run ia ate o fim e
-  // so segurava o envio la embaixo; agora nem comeca — abrir Chrome, passar pela
-  // Cloudflare e acordar a maquina duas vezes no fim de semana (14h, 16h, 17h)
-  // era trabalho para colher nada, e todo run e uma chance a mais de a sessao do
-  // portal ou do zap quebrar sozinha.
-  //
-  // Duas escapatorias de proposito: --dry (ferramenta de teste, tem que rodar
-  // quando eu mandar) e --data= explicito (se eu peco um sabado nominalmente, e
-  // porque quero conferir aquele sabado).
-  const dataExplicita = process.argv.some((a) => a.startsWith('--data='));
-  const alvo = deBR(dataBR);
-  if (!dry && !dataExplicita && alvo && ehFimDeSemana(alvo)) {
-    log.info(`${dataBR} e fim de semana — o Diario nao publica. Nada a fazer.`);
-    return;
-  }
 
   try {
     stage = 'coleta';
@@ -249,6 +229,151 @@ async function main() {
       await notificarFalha(stage, error);
     }
     process.exitCode = 1;
+  }
+}
+
+/**
+ * Reconfere UM dia passado na API do CNJ e manda o que tinha ficado de fora.
+ *
+ * O envio e o mesmo do complemento de retry (mesmo PDF com sufixo de hora,
+ * mesmo cabecalho "_complemento_"), so que com a data daquele dia — nunca a de
+ * hoje. Publicacao atrasada chegar carimbada com a data errada seria pior do
+ * que nao chegar: o prazo conta da disponibilizacao.
+ */
+async function revisarDia(dataBR, dry) {
+  const { dataISO, novas, completo, registro } = await pendentesDoDia(dataBR);
+
+  if (!novas.length) {
+    log.info(`Revisao de ${dataBR}: nada ficou para tras na API do CNJ.`);
+    return;
+  }
+
+  const quantas = `${novas.length} publicacao(oes)`;
+  log.warn(
+    registro
+      ? `Revisao de ${dataBR}: ${quantas} entraram no DJEN depois do envio daquele dia.`
+      : `Revisao de ${dataBR}: ${quantas} e o dia nao tem registro de envio nenhum.`,
+  );
+
+  const avisos = [
+    `REVISÃO DE ${dataBR}: ${novas.length} publicação(ões) daquele dia não tinham sido enviadas — ` +
+      `entraram no diário depois do último envio. Só a API do CNJ (DJEN) foi reconferida: ` +
+      `publicação que exista apenas nos diários de MG ou da União não entra nesta conferência, ` +
+      `confira o portal da OAB se o dia for crítico.`,
+  ];
+  // esperado/extraido descrevem ESTE lote, nao o dia: o numero cheio do dia
+  // mora no state.json e a revisao nao o recalcula (ver recordComplemento).
+  const envio = {
+    dataBR,
+    publicacoes: novas,
+    avisos,
+    complemento: true,
+    esperado: novas.length,
+    extraido: novas.length,
+  };
+
+  const pdfPath = await gerarPDF(envio);
+  if (dry) {
+    log.info(`DRY RUN — revisao de ${dataBR} nao envia. PDF: ${pdfPath}`);
+    return;
+  }
+
+  const falhas = [];
+  for (const canal of config.canais) {
+    try {
+      await ENVIAR[canal]({ ...envio, pdfPath });
+    } catch (e) {
+      log.warn(`Revisao de ${dataBR}: canal "${canal}" falhou —`, e.message);
+      falhas.push([canal, e]);
+    }
+  }
+
+  // Entrega parcial NAO grava os ids. Sem isso a publicacao ficaria marcada
+  // como resolvida e o canal que falhou nunca a receberia — e o retry das
+  // 16h/17h so tem como reconferir o que continua pendente. O preco e repetir
+  // no canal que ja recebeu, que e a troca de sempre: duplicata e chateacao,
+  // publicacao faltando e prazo.
+  if (falhas.length) {
+    const motivo = falhas.map(([c, e]) => `${c}: ${e.message}`).join(' | ');
+    log.warn(`Revisao de ${dataBR} nao saiu por todos os canais — sera tentada de novo.`);
+    recordError('revisao', new Error(`Revisao de ${dataBR} incompleta — ${motivo}`));
+    return;
+  }
+
+  recordComplemento(dataISO, { publicacoes: novas, completo });
+  log.info(`Revisao de ${dataBR}: ${quantas} enviadas e registradas.`);
+}
+
+/**
+ * Passa pelos dias uteis anteriores (REVISAO_DIAS, padrao 1) antes de o dia
+ * corrente ser tratado.
+ *
+ * Best effort do inicio ao fim: a API do CNJ fora do ar, ou um dia da lista que
+ * exploda, nao pode derrubar o run — o dia de hoje vale mais que a conferencia
+ * de ontem. Cada dia em try proprio pelo mesmo motivo.
+ */
+async function revisarAnteriores(dataBR, dry) {
+  const dias = diasParaRevisar(dataBR);
+  if (!dias.length) return;
+
+  if (!temHistorico()) {
+    log.info('Revisao: nao ha dia registrado ainda — sem passado para conferir.');
+    return;
+  }
+
+  for (const dia of dias) {
+    try {
+      await revisarDia(dia, dry);
+    } catch (e) {
+      log.warn(`Revisao de ${dia} falhou (${e.message}) — sera tentada no proximo run.`);
+    }
+  }
+}
+
+/**
+ * Flags:
+ *   --dry              gera os arquivos em out/ e nao envia nada
+ *   --data=dd/mm/aaaa  consulta outra data (padrao: hoje) e nao revisa nada
+ *   --retry            no-op so se o dia estiver inteiramente resolvido
+ *                      (ver isDayComplete: saiu, por todos os canais, com
+ *                      todas as fontes de pe)
+ */
+async function main() {
+  const dataBR = targetDateBR();
+  const dry = isDryRun();
+
+  // Sabado e domingo o Diario nao circula: a API devolve zero (conferido em 08 e
+  // 09/08/2026) e o portal repete o ultimo dia util. Antes o run ia ate o fim e
+  // so segurava o envio la embaixo; agora nem comeca — abrir Chrome, passar pela
+  // Cloudflare e acordar a maquina duas vezes no fim de semana (14h, 16h, 17h)
+  // era trabalho para colher nada, e todo run e uma chance a mais de a sessao do
+  // portal ou do zap quebrar sozinha.
+  //
+  // Vale para a revisao tambem: a segunda-feira ja reconfere a sexta, entao
+  // acordar a maquina no sabado nao adiantaria o aviso de nada.
+  //
+  // Duas escapatorias de proposito: --dry (ferramenta de teste, tem que rodar
+  // quando eu mandar) e --data= explicito (se eu peco um sabado nominalmente, e
+  // porque quero conferir aquele sabado).
+  const dataExplicita = process.argv.some((a) => a.startsWith('--data='));
+  const alvo = deBR(dataBR);
+  if (!dry && !dataExplicita && alvo && ehFimDeSemana(alvo)) {
+    log.info(`${dataBR} e fim de semana — o Diario nao publica. Nada a fazer.`);
+    return;
+  }
+
+  await processarDia(dataBR, dry);
+
+  // Depois, nunca antes. Tres razoes, todas de ordem:
+  //   1. o dia de hoje nao pode esperar a conferencia de ontem — se a API do
+  //      CNJ estiver lenta na revisao, o envio das 14h ja saiu;
+  //   2. recordSuccess zera lastError. Rodando antes, uma revisao que falhasse
+  //      teria o erro apagado pelo sucesso do dia corrente, e o retry das 16h
+  //      nao teria como saber que ficou servico;
+  //   3. --data= explicito e pedido pontual daquela data: revisar a vespera
+  //      dela seria efeito colateral que ninguem pediu.
+  if (!dataExplicita) {
+    await revisarAnteriores(dataBR, dry);
   }
 }
 

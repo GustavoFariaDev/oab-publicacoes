@@ -15,6 +15,7 @@ const SUITES = [
   'prazo.mjs',
   'merge.mjs',
   'estado.mjs',
+  'revisao.mjs',
   'saude.mjs',
   'feriado-local.mjs',
   'advogado.mjs',

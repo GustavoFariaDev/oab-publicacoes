@@ -4,7 +4,12 @@ import { config } from './config.js';
 const EMPTY = {
   lastSuccessAt: null,
   lastError: null,
-  /** { "2026-08-11": { esperado, extraido, completo, canaisEntregues, enviadoEm, ids } } */
+  /**
+   * { "2026-08-11": { esperado, extraido, completo, canaisEntregues, enviadoEm,
+   *                   revisadoEm?, ids } }
+   * revisadoEm so aparece nos dias em que a revisao do dia seguinte achou
+   * publicacao atrasada e a mandou (ver recordComplemento).
+   */
   days: {},
 };
 
@@ -112,6 +117,52 @@ export function recordSuccess(dateISO, { esperado, extraido, publicacoes, comple
   };
   state.lastSuccessAt = new Date().toISOString();
   state.lastError = null;
+  save(state);
+}
+
+/**
+ * Acrescenta a um dia JA FECHADO as publicacoes que a revisao do dia seguinte
+ * encontrou atrasadas (ver src/revisao.js).
+ *
+ * Existe separado do recordSuccess porque o que ele NAO pode fazer e o ponto:
+ *
+ *   - nao sobrescreve esperado/extraido com os numeros da revisao. A revisao ve
+ *     so a API do CNJ; o registro original contou tambem o portal. Trocar 5 por
+ *     3 faria o dia parecer que encolheu, e diagnosticarDia passaria a acusar
+ *     "coletadas 3 de 5" para sempre. Os dois sobem juntos pelo tanto que
+ *     entrou, que e o unico numero que a revisao sabe de verdade;
+ *   - nao promove `completo` a true. Se o portal caiu naquele dia, ele continua
+ *     caido — uma conferencia que nao olhou o portal nao tem como absolver o
+ *     portal. So um dia SEM registro nenhum recebe a opiniao da revisao;
+ *   - nao mexe em lastError. A revisao roda depois do dia corrente, e limpar o
+ *     erro dele aqui esconderia justamente o que o retry das 16h/17h precisa ler.
+ *
+ * So e chamada quando TODOS os canais entregaram o complemento (ver
+ * src/index.js): gravar id que saiu pela metade faria a proxima revisao
+ * considerar a publicacao resolvida e o canal que falhou nunca receberia.
+ *
+ * @param {boolean} completo  opiniao da revisao, usada so se o dia nao tem registro
+ */
+export function recordComplemento(dateISO, { publicacoes, completo }) {
+  const state = load();
+  const anterior = state.days[dateISO] ?? null;
+  const previous = anterior?.ids ?? [];
+  const ids = [...new Set([...previous, ...publicacoes.flatMap(publicationIds)])];
+  const novos = ids.length - previous.length;
+
+  state.days[dateISO] = {
+    ...anterior,
+    esperado: (anterior?.esperado ?? 0) + novos,
+    extraido: (anterior?.extraido ?? 0) + novos,
+    completo: anterior ? anterior.completo : completo,
+    // Uniao, nao substituicao: se CANAIS encolheu desde aquele dia, o canal que
+    // saiu da configuracao ainda recebeu o lote original, e apagar isso do
+    // registro reescreveria o passado.
+    canaisEntregues: [...new Set([...(anterior?.canaisEntregues ?? []), ...config.canais])],
+    enviadoEm: new Date().toISOString(),
+    revisadoEm: new Date().toISOString(),
+    ids,
+  };
   save(state);
 }
 

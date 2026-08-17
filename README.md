@@ -14,6 +14,10 @@ O objetivo não é "automatizar uma consulta". É que **uma publicação não pa
 ```mermaid
 flowchart TD
     T["14h, seg–sex — Agendador do Windows"] --> C{Coleta}
+    T --> RV["Revisão do dia útil anterior<br/>só API do CNJ"]
+    RV --> RN{"Ficou algo<br/>para trás?"}
+    RN -->|sim| CP["Complemento com a data<br/>daquele dia"]
+    RN -->|não| Q2["silêncio"]
     C --> CNJ["API do CNJ (DJEN)<br/>pública, sem login"]
     C --> P["Portal da OAB SP<br/>Chrome autenticado"]
     CNJ --> U["União + dedupe<br/>conservador entre fontes"]
@@ -38,6 +42,20 @@ Um dia só é **resolvido** quando as quatro coisas valem: saiu, saiu por todos 
 Mesmo assim, **os retries sempre coletam de novo**. Publicação entra no diário ao longo do dia, e "o dia já saiu" não significa "nada mais pode chegar" — quem decide se há o que enviar é o dedupe, não o estado. Sem novidade e sem canal pendente, o retry termina em silêncio.
 
 Às 18h um **guarda-noturno** confere o estado e avisa se o dia não fechou. Ele existe porque silêncio significa duas coisas opostas: "não havia publicação" e "a automação falhou sem conseguir avisar".
+
+### Revisão do dia anterior
+
+O último retry é às 17h. Publicação que entre no diário depois disso não seria vista por ninguém: no dia seguinte o pipeline só olha a data corrente. Por isso **todo run reconfere antes o dia útil anterior** (`REVISAO_DIAS`, padrão 1; segunda-feira revisa a sexta) e manda o que tiver ficado para trás — como complemento, **com a data daquele dia**, nunca a de hoje: o prazo conta da disponibilização.
+
+Ela reconfere **só a API do CNJ**, e isso está escrito na mensagem que sai. O portal exigiria abrir Chrome, autenticar e passar pela Cloudflare mais uma vez por dia, para um dia que quase sempre está em ordem — e cada abertura é mais uma chance de a sessão quebrar bem na hora do envio do dia corrente. Publicação que exista *apenas* nos diários de MG ou da União fica fora dessa conferência.
+
+Três regras que a mantêm honesta:
+
+- **roda depois do dia corrente**, nunca antes — o envio das 14h não espera a conferência de ontem, e um erro da revisão não é apagado pelo sucesso do dia;
+- **entrega parcial não é registrada**: se um canal falha, os ids não entram no estado e o run seguinte manda tudo de novo, para todos. Duplicata é chateação; publicação faltando é prazo;
+- **não reescreve o passado**: os números do dia sobem pelo tanto que entrou, e um dia que fechou com o portal caído continua marcado assim — uma conferência que não olhou o portal não tem como absolvê-lo.
+
+Numa instalação nova, sem nenhum dia no `state.json`, a revisão não roda: estado vazio significa "nunca rodou", não "falhou ontem".
 
 ## As duas fontes
 
@@ -115,13 +133,13 @@ O portal é lido por um Chrome **normal**, ao qual o robô se conecta por CDP. N
 | `npm run once` | Pipeline completo agora, com envio real |
 | `npm run once -- --data=07/08/2026` | Força uma data específica |
 | `npm run checar` | Confere se o dia fechou; avisa só se não fechou |
-| `npm run teste` | 192 verificações (prazo, união, estado, saúde, feriados, confirmação de envio) |
+| `npm run teste` | 212 verificações (prazo, união, estado, revisão, saúde, feriados, confirmação de envio) |
 | `npm run abrir-chrome` | Abre a janela do portal (login + Cloudflare) |
 | `npm run inspecionar` | Conecta na janela aberta para conferir seletores |
 | `npm run setup:whatsapp` | Reconecta o WhatsApp (novo QR) |
 | `npm run register-task` | (Re)cria as tarefas agendadas |
 
-Flags: `--dry`, `--data=dd/mm/aaaa`, `--retry` (coleta e só envia o que for novo), `--variantes` (varre os sufixos de inscrição da OAB).
+Flags: `--dry`, `--data=dd/mm/aaaa` (data pontual — não dispara a revisão da véspera), `--retry` (coleta e só envia o que for novo), `--variantes` (varre os sufixos de inscrição da OAB).
 
 ## Estado
 
@@ -130,6 +148,7 @@ Flags: `--dry`, `--data=dd/mm/aaaa`, `--retry` (coleta e só envia o que for nov
 - [x] União das fontes com dedupe conservador
 - [x] PDF, e-mail e WhatsApp independentes
 - [x] Estado por dia + retries que sempre reconferem
+- [x] Revisão do dia útil anterior na API do CNJ, antes de cuidar do dia de hoje
 - [x] Contagem de prazo, com feriado por comarca
 - [x] Checagem diária que avisa quando o dia não fecha
 
