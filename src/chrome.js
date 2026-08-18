@@ -71,7 +71,18 @@ export async function garantirChrome({ esperaMs = 15000 } = {}) {
       // le a caixa de dialogo em vez do portal.
       '--disable-session-crashed-bubble',
       '--hide-crash-restore-bubble',
-      config.urls.publicacoes,
+      // A janela abre no SITE INSTITUCIONAL, nao direto no portal (18/08/2026).
+      //
+      // E a tela por onde um humano entra — e, quando a sessao esta caida, o
+      // proprio login ja comeca por aqui (menu > INTIMACOES, ver src/login.js).
+      // Abrir direto no recortedigital deixava a janela parada numa tela que so
+      // serve se ja houver sessao; quando nao havia, o Chrome restaurava a aba
+      // do LOGIN da vespera, com a senha preenchida pelo autofill, parecendo
+      // que o robo tinha parado a um clique do fim — e nao era isso.
+      //
+      // Nao resolve o desafio da Cloudflare: ele continua humano. Mas o desafio
+      // passa a aparecer NESTA tela, que e onde o clique tem de acontecer.
+      config.urls.site,
     ],
     { detached: true, stdio: 'ignore' },
   );
