@@ -52,9 +52,53 @@ export async function conectarChromeAberto({ abrirSePreciso = true } = {}) {
   return { browser, context, page };
 }
 
-/** Detecta a tela de desafio da Cloudflare. */
+/** Detecta a tela de desafio da Cloudflare NESTE instante. */
 export async function isCloudflareChallenge(page) {
   const title = await page.title().catch(() => '');
   if (/just a moment|um momento/i.test(title)) return true;
   return page.locator('#challenge-running, #cf-challenge-running').count().then((n) => n > 0);
+}
+
+/**
+ * Espera o desafio da Cloudflare passar sozinho. So diz que persiste se ele
+ * ainda estiver na tela depois da espera.
+ *
+ * Por que esperar em vez de desistir na primeira olhada: o desafio tem dois
+ * tipos, e so um precisa do usuario. O interativo ("Confirme que e humano")
+ * fica ate alguem clicar; o nao-interativo se resolve sozinho em alguns
+ * segundos e segue para a pagina. Quem olha uma vez so nao distingue os dois —
+ * chama os dois de bloqueio e manda o usuario clicar numa caixa que ja nao
+ * existe mais.
+ *
+ * Foi o que aconteceu de 13 a 19/08/2026: TODA execucao agendada (17h, 19h,
+ * 20h) morreu em ~1s com "desafio da Cloudflare", e toda execucao que o
+ * usuario disparou a mao logo em seguida passou em ~6s. A diferenca nao era o
+ * Cloudflare estar mais bravo no horario agendado — era o navegador estar
+ * frio. O robo abre o Chrome, vai em www.oabsp.org.br e dali salta para
+ * www2.oabsp.org.br: host diferente, desafio proprio, e o `domcontentloaded`
+ * do goto devolve JA na tela do desafio. Quando o usuario roda a mao, ele
+ * acabou de navegar nos dois hosts e nenhum desafio aparece.
+ *
+ * Isto nao tenta resolver nem burlar o desafio: quem resolve e a propria
+ * Cloudflare, ou o usuario. Aqui so se para de confundir "ainda carregando"
+ * com "bloqueado".
+ *
+ * @param {import('playwright').Page} page
+ * @param {number} timeoutMs quanto esperar antes de considerar que travou
+ * @returns {Promise<boolean>} true se o desafio AINDA esta na tela
+ */
+export async function desafioCloudflarePersiste(page, timeoutMs = 15000) {
+  if (!(await isCloudflareChallenge(page))) return false;
+
+  const limite = Date.now() + timeoutMs;
+  while (Date.now() < limite) {
+    await page.waitForTimeout(500);
+    if (!(await isCloudflareChallenge(page))) {
+      // Passou sozinho. Deixa a pagina de destino assentar antes de devolver:
+      // o desafio sai por navegacao, e quem chamou vai procurar seletores.
+      await page.waitForLoadState('domcontentloaded').catch(() => {});
+      return false;
+    }
+  }
+  return true;
 }

@@ -1,6 +1,6 @@
 import { config } from './config.js';
 import { log } from './log.js';
-import { isCloudflareChallenge } from './browser.js';
+import { desafioCloudflarePersiste } from './browser.js';
 
 /**
  * Faz o login no portal pelo caminho que o usuario faz a mao:
@@ -26,7 +26,19 @@ import { isCloudflareChallenge } from './browser.js';
  */
 
 const SEL = {
-  loggedIn: 'text=/Sair|Logout|Bem.?vindo/i',
+  /**
+   * O `>> visible=true` no fim nao e enfeite: e o que separa "estou logado" de
+   * "estou na tela de login".
+   *
+   * A propria LoginMain.aspx carrega um <a> de "Logout" no cabecalho, escondido
+   * (display:none) ate a sessao existir. `count()` conta no DOM, nao na tela —
+   * entao o marcador de logado batia EM CIMA do formulario de login. As duas
+   * consequencias, medidas em 19/08/2026: garantirSessao decidia que ja estava
+   * logado e voltava sem logar (o robo ficava parado na tela de login com o
+   * formulario preenchido), e o teste de "voltou autenticado" depois do submit
+   * nunca reprovava, porque o mesmo link escondido respondia por ele.
+   */
+  loggedIn: 'text=/Sair|Logout|Bem.?vindo/i >> visible=true',
   /**
    * O botao do menu nao tem texto — e um icone. Sem rotulo visivel para ancorar,
    * vai por candidatos, do mais especifico ao mais generico, e o teste de
@@ -81,6 +93,10 @@ export async function garantirSessao(page) {
 }
 
 async function estaLogado(page) {
+  // A tela de login nunca conta como logado, por mais que o cabecalho dela
+  // pareca o de uma area autenticada. Guarda barata e que nao depende de qual
+  // elemento o site resolve esconder ou mostrar.
+  if (/LoginMain\.aspx/i.test(page.url())) return false;
   return (await page.locator(SEL.loggedIn).count()) > 0;
 }
 
@@ -208,9 +224,9 @@ async function preencherSeVazio(campo, valor) {
 }
 
 async function recusarCloudflare(page) {
-  if (await isCloudflareChallenge(page)) {
+  if (await desafioCloudflarePersiste(page)) {
     throw new Error(
-      'O portal esta mostrando o desafio da Cloudflare. ' +
+      'O portal esta mostrando o desafio da Cloudflare e ele nao passou sozinho. ' +
         'Clique em "Confirme que e humano" na janela do Chrome e rode de novo.',
     );
   }

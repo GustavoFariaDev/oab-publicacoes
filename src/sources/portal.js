@@ -2,7 +2,7 @@ import path from 'node:path';
 import fs from 'node:fs';
 import { config, brToISO } from '../config.js';
 import { log } from '../log.js';
-import { conectarChromeAberto, isCloudflareChallenge } from '../browser.js';
+import { conectarChromeAberto, desafioCloudflarePersiste } from '../browser.js';
 import { garantirSessao } from '../login.js';
 
 /**
@@ -35,7 +35,10 @@ import { garantirSessao } from '../login.js';
  * programador deu ao campo, e esse so muda se o campo mudar de proposito.
  */
 const SEL = {
-  loggedIn: 'text=/Sair|Logout|Bem.?vindo/i',
+  // `>> visible=true` obrigatorio: a tela de login carrega um "Logout"
+  // escondido no cabecalho, e sem o filtro ele responde por "sessao viva"
+  // estando justamente na pagina que prova o contrario. Ver src/login.js.
+  loggedIn: 'text=/Sair|Logout|Bem.?vindo/i >> visible=true',
   dateFrom: 'input[id$="txtSelDataInicio"]',
   dateTo: 'input[id$="txtSelDataFim"]',
   consultar: 'input[value="Consultar"]',
@@ -154,9 +157,9 @@ async function consultarDia(page, dataBR) {
   // e sempre "nao" — e o robo acusa sessao caida com a sessao viva.
   await irParaPublicacoesPorData(page);
 
-  if (await isCloudflareChallenge(page)) {
+  if (await desafioCloudflarePersiste(page)) {
     throw new Error(
-      'O portal está mostrando o desafio da Cloudflare. ' +
+      'O portal está mostrando o desafio da Cloudflare e ele não passou sozinho. ' +
         'Clique em "Confirme que é humano" na janela do Chrome e rode de novo.',
     );
   }
