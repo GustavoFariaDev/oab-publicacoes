@@ -1,6 +1,29 @@
 # O que falta para funcionar 100%
 
-Estado em **12/08/2026, 15h30**. Cada item diz o que é, o que custa deixar como está, e o que fazer.
+Estado em **21/08/2026**. Cada item diz o que é, o que custa deixar como está, e o que fazer.
+
+## Aberto agora, em ordem de prioridade
+
+1. **[O portal morre no run das 14h, todo dia](#0-o-portal-morre-no-run-das-14h)** — nada se perde, mas MG e União chegam 2h atrasados
+2. **[As demais comarcas ainda não foram conferidas](#3b-as-demais-comarcas-ainda-nao-foram-conferidas)** — erro na direção segura, mas é ruído evitável
+3. **[Publicação que nenhuma das duas fontes traz](#5-as-fontes-divergem--e-cada-divergencia-significa-uma-coisa)** — sem detecção possível
+4. **[O robô não sabe de quem é o prazo](#o-limite-que-nenhum-destes-itens-resolve)** — mitigado em 21/08, não resolvido
+
+---
+
+## 0. O portal morre no run das 14h
+
+**Estado:** aberto. Medido nos logs de 18, 19 e 20/08/2026.
+
+Nos três dias, o run das **14h** perdeu a fonte Portal com *"o desafio da Cloudflare não passou sozinho"* — sempre em **exatamente 15 segundos**, que era o teto da espera. Nos três dias, o run das **16h** entrou no portal em ~7 segundos, sem desafio nenhum. Medido à mão em 21/08, com o navegador aquecido, o mesmo desafio na tela de login saiu sozinho em **3,4 segundos**.
+
+**O que custa:** o dia não se perde — o CNJ entrega às 14h e o retry das 16h manda como complemento o que o portal trouxer. Mas tudo que **só** existe no portal (diários de MG e da União) chega duas horas depois do resto, todo dia. E o aviso de fonte caída sai todo dia, que é o jeito mais rápido de ensinar alguém a ignorar o aviso.
+
+**O que já foi feito (21/08):** a espera subiu de 15s para 45s (`CLOUDFLARE_ESPERA_MS`) e, quando ela estoura, ficam gravados **print, HTML, URL e se há caixa para clicar** (`out/<data>/cloudflare-*.png`). Antes disso a falha diária não deixava rastro nenhum — o log dizia "desafio da Cloudflare" e acabava ali, e por isso "é só esperar mais" passou três dias sendo palpite em vez de medida.
+
+**O que fazer:** olhar o próximo estouro. O print responde a pergunta que os logs não respondem: se o desafio é o **interativo** (tem caixa, espera gente) ou o **não-interativo** (não tem, só demora). São problemas diferentes — um pede o clique do Gus, o outro pede tempo, e agora dá para saber qual é sem adivinhar.
+
+---
 
 ## Resolvido neste dia
 
@@ -52,6 +75,8 @@ Medido com uma publicação real: 15 dias úteis a partir de 14/08 vencem **04/0
 As comarcas configuradas ficam no `.env`, que não vai para o repositório — aqui só o mecanismo.
 
 ---
+
+<a id="3b-as-demais-comarcas-ainda-nao-foram-conferidas"></a>
 
 ## 3b. As demais comarcas ainda não foram conferidas
 
@@ -121,6 +146,8 @@ O `sendMessage` volta **antes de a mensagem sair**, e o `destroy()` do bloco `fi
 
 ---
 
+<a id="5-as-fontes-divergem--e-cada-divergencia-significa-uma-coisa"></a>
+
 ## 5. As fontes divergem — e cada divergencia significa uma coisa
 
 Medido em 12 e 13/08/2026, com as duas fontes ligadas:
@@ -139,7 +166,11 @@ Medido em 12 e 13/08/2026, com as duas fontes ligadas:
 
 ---
 
-## 5b. O portal enche mais tarde que a API do CNJ
+## ~~5b. O portal enche mais tarde que a API do CNJ~~ — MEDIDO em 21/08/2026
+
+> **A observação pedida aqui ("se em vários dias o portal ainda estiver vazio às 17h, vale mover o horário principal") foi feita.** Nos logs de 18, 19 e 20/08 o portal responde **às 16h** — não às 17h, e não às 14h. Mas a causa não é o portal encher tarde: é o desafio da Cloudflare estourar no run das 14h (item 0 acima). Mover o horário principal esconderia o defeito em vez de consertá-lo, e ainda atrasaria o envio do que o CNJ já tem às 14h. Fica como está até o item 0 ser resolvido.
+
+## 5b. O portal enche mais tarde que a API do CNJ (registro original)
 
 **Medido em 13/08/2026, 08h:** a API do CNJ já tinha 11 publicações do dia; o portal, zero. Às 14h de ontem o portal tinha as 7 do dia — ou seja, o filtro funciona e o portal simplesmente é atualizado mais tarde.
 
@@ -149,9 +180,13 @@ Medido em 12 e 13/08/2026, com as duas fontes ligadas:
 
 ---
 
-## 6. Publicação que só existe no portal sai com texto cortado
+## ~~6. Publicação que só existe no portal sai com texto cortado~~ — RESOLVIDO em 21/08/2026, com um limite
 
-O portal corta a intimação em ~986 caracteres. Quando a publicação também vem da API, a união fica com o texto inteiro. Quando só existe no portal, sai a prévia cortada — em 12/08 foi 1 das 7. Ver item 3b de `docs/MELHORIAS.md`.
+O portal corta a intimação em ~986 caracteres — **todas elas**, e não só as exclusivas (medido em 21/08: as 7 publicações de 19/08 vieram cortadas). Quando a publicação também vem da API, a união fica com o texto inteiro; o problema era a que só existe no portal.
+
+**Como ficou:** `src/inteiro-teor.js` busca a publicação cortada na API do CNJ **pelo número do processo** — ela é invisível à consulta por inscrição quando o advogado não está constituído ali, mas continua no DJEN com o texto inteiro. No dry run de 19/08, as duas publicações portal-only foram completadas. Detalhes e as guardas em `docs/MELHORIAS.md`, item 3b.
+
+**O limite:** publicação que exista só nos diários de **MG ou da União** não está no DJEN e continua saindo cortada. A diferença é que agora ela **diz** que está cortada — no PDF e nos avisos do dia — em vez de parecer inteira.
 
 ---
 
@@ -167,14 +202,16 @@ Ele confere os canais **configurados**, não um canal fixo: com `CANAIS=whatsapp
 
 ---
 
-## 8. Falta a primeira execução completa de ponta a ponta
+## ~~8. Falta a primeira execução completa de ponta a ponta~~ — ACONTECEU, e nove dias seguidos
 
-Nunca aconteceu um 14h com **tudo junto**: dia zerado, portal ligado desde o início e dois canais. A de 12/08 rodou com o portal desligado e o dia já entregue.
+**Conferido no `state.json` em 21/08/2026.** De 12 a 20/08, todo dia útil com publicação fechou com `canaisEntregues: ["whatsapp","email"]` — 12, 13, 14, 17, 18, 19 e 20/08. Sexta 15/08 não tem registro porque não havia o que registrar: o dia teve **zero** publicação nas duas fontes (reconferido na API em 21/08), e dia sem publicação não gera mensagem de propósito.
 
-**O que olhar amanhã depois das 14h:** se chegou pelos dois canais, se o `state.json` fechou com `canaisEntregues: ["whatsapp","email"]`, e se o e-mail caiu na caixa principal ou no spam.
+O que a série mostra, além de funcionar: 13/08 fechou com `completo: false` e continua assim, porque naquele dia uma fonte veio pela metade — e a revisão do dia anterior não reescreve o passado. É o comportamento certo, e é bom vê-lo no registro.
 
 ---
 
+<a id="o-limite-que-nenhum-destes-itens-resolve"></a>
+
 ## O limite que nenhum destes itens resolve
 
-**O robô não sabe de quem é o prazo.** A regra do prazo único evita o caso mais ruidoso (ato com vários prazos, nenhum seu), mas um ato com prazo único dirigido ao perito ainda sai como se fosse seu. Só leitura humana resolve. É o motivo de toda saída levar a ressalva — e o motivo de "100%" aqui significar "coleta e entrega confiáveis", nunca "pode confiar na data sem conferir".
+**O robô não sabe de quem é o prazo.** A regra do prazo único evita o caso mais ruidoso (ato com vários prazos, nenhum seu), e desde 21/08 a saída **marca a dúvida** quando o sujeito da frase é um auxiliar do juízo — perito, Ministério Público, contadoria, oficial de justiça (ver `docs/MELHORIAS.md`, item 3). Mas isso é leitura de texto, e erra nos dois sentidos: um ato dirigido ao perito com a frase escrita de outro jeito ainda sai como se fosse seu. Só leitura humana resolve. É o motivo de toda saída levar a ressalva — e o motivo de "100%" aqui significar "coleta e entrega confiáveis", nunca "pode confiar na data sem conferir".

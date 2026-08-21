@@ -8,7 +8,9 @@ Ordenadas por quanto entregam pelo que custam. Nada aqui está prometido.
 
 ## Alto valor
 
-### 1. Janela de dois dias na consulta ao DJEN
+### 1. Janela de dois dias na consulta ao DJEN — em parte resolvida por outro caminho
+
+> **21/08/2026:** a revisão do dia útil anterior (`src/revisao.js`) cobre o buraco que motivava esta ideia — publicação que entra no diário depois do último retry das 17h é apanhada no run seguinte e mandada como complemento, com a data daquele dia. O que continua valendo aqui é o resto: a API recomenda consultar ontem + hoje **na mesma consulta**, e a revisão faz uma consulta separada. Menor prioridade, mesmo ganho quase todo já entregue.
 
 **Hoje:** consulta um único dia (`dataDisponibilizacaoInicio = Fim = hoje`).
 
@@ -18,7 +20,7 @@ Ordenadas por quanto entregam pelo que custam. Nada aqui está prometido.
 
 **Risco:** mexe na semântica de "as publicações do dia", que é o que o relatório diário promete. Decidir se a de ontem entra como complemento do dia de ontem ou aparece no relatório de hoje.
 
-### 2. Link da certidão oficial em cada publicação
+### ~~2. Link da certidão oficial em cada publicação~~ — FEITO em 21/08/2026
 
 **Ganho:** cada comunicação do DJEN traz um `hash` que dá acesso a uma certidão em PDF, pública:
 
@@ -28,29 +30,53 @@ https://comunicaapi.pje.jus.br/api/v1/comunicacao/{hash}/certidao
 
 É o documento oficial da intimação. Ter o link no PDF e no e-mail transforma o relatório de "aviso" em "prova".
 
-**Custo:** baixo — guardar `item.hash` em `paraPublicacao()` e imprimir o link. Não precisa de proxy: abre direto no navegador (de IP brasileiro).
+**Como ficou:** `urlCertidao()` em `src/sources/cnj.js`, campo `certidao` na publicação, link clicável no PDF e no e-mail. Conferido contra as duas comunicações de 20/08/2026: HTTP 200, `application/pdf`, 126 KB e 61 KB. Não pede autenticação, mas — como o resto da API — só responde a IP brasileiro.
 
-### 3. Marcar de quem parece ser o prazo
+`certidao` entrou também na lista de campos que a união completa entre fontes. Sem isso, o link se perdia justamente nas publicações que existem nas duas: quando o grupo era criado pelo portal (que não tem certidão) e o CNJ chegava depois, o campo já estava lá, vazio, e não era preenchido.
+
+### ~~3. Marcar de quem parece ser o prazo~~ — FEITO em 21/08/2026
 
 **Ganho:** ataca o limite central do projeto. Hoje um ato com prazo único dirigido ao perito sai como se fosse seu. Dá para olhar as ~60 palavras antes do prazo e sinalizar quando o sujeito é outro ("o perito", "o Ministério Público", "a serventia", "o contador").
 
 **Custo:** médio. É heurística de texto, e erra nos dois sentidos.
 
-**Risco — leia antes de fazer:** o valor está em **marcar dúvida**, nunca em esconder. Um prazo classificado como "do perito" e omitido é exatamente o modo de falhar que o projeto inteiro evita. A saída certa é uma ressalva a mais ("este prazo parece ser do perito"), nunca uma publicação a menos.
+**Risco — e como ele foi tratado:** o valor está em **marcar dúvida**, nunca em esconder. Um prazo classificado como "do perito" e omitido é exatamente o modo de falhar que o projeto inteiro evita. A saída certa é uma ressalva a mais, nunca uma publicação a menos — e há um teste chamado *"marcar o sujeito NAO apaga o vencimento"* justamente para travar isso.
 
-### 3b. Texto inteiro das publicações que só existem no portal
+**Como ficou** (`sujeitoDoPrazo`, em `src/prazo.js`): olha a frase antes do prazo e marca quando o sujeito é **auxiliar do juízo** — perito, Ministério Público, contadoria, serventia, oficial de justiça, leiloeiro, administrador judicial, depositário, intérprete, curador especial.
+
+Três decisões que a mantêm quieta:
+
+- **"réu", "autor" e "requerido" ficam de fora da lista.** Qualquer um deles pode ser o seu cliente, e marcar "parece ser do réu" numa intimação que é sua transformaria a rede de segurança em ruído;
+- **vence quem está mais perto do prazo.** Em *"o perito apresentará laudo; após, as partes serão intimadas no prazo de quinze dias"*, o sujeito dos quinze dias é "as partes" — e aí ela se cala;
+- **prazo repetido com sujeitos diferentes também cala.** Marcar o sujeito errado é pior do que não marcar nenhum.
+
+Só é perguntado quando há **um** prazo no texto — que é exatamente o caso em que uma data é estampada como se fosse sua.
+
+### ~~3b. Texto inteiro das publicações que só existem no portal~~ — FEITO em 21/08/2026, por outro caminho
 
 **Hoje:** o portal corta a intimação em ~986 caracteres e marca o corte com "...". Quando a mesma publicação também vem da API do CNJ, a união fica com o texto inteiro da API — foi o motivo de `melhorTexto()` preferir texto não truncado a texto mais longo. Mas quando a publicação **só** existe no portal (as de MG, da União, e as que o DJEN não trouxe), o que sai no PDF é a prévia cortada.
 
 **Ganho:** o PDF promete inteiro teor. Em 12/08/2026, 1 das 7 publicações saiu cortada.
 
-**Custo:** médio. Provavelmente é clicar na publicação para abrir o detalhe, o que significa mais um seletor e uma navegação por publicação — mais lento e mais frágil. Vale medir antes: se quase toda publicação do portal também vem pela API, o caso raro pode não pagar.
+**Medido em 21/08/2026, contra a tela real:** as **sete** publicações de 19/08 vieram cortadas em ~986 caracteres — o portal trunca todas, não só as exclusivas. O que salva a maioria é a união com a API.
 
-### 4. Prazo também no e-mail
+**O caminho óbvio não existe.** O portal não tem tela de detalhe: o texto inteiro só sai pelo menu "Exportar", que é `__doPostBack` → modal de confirmação → download de RTF/TXT. Mais navegação, mais seletor, mais Cloudflare e um formato a parsear, tudo dentro da fonte que já é a frágil.
+
+**Como ficou** (`src/inteiro-teor.js`): a publicação cortada é buscada na API do CNJ **pelo número do processo**. Ela some da consulta por inscrição quando o advogado não está constituído ali — o portal recorta por nome e pega processo em que você é parte, ou em que outro advogado atua —, mas continua no DJEN, com texto inteiro e certidão. No dry run de 19/08 as duas publicações portal-only foram completadas.
+
+Três guardas:
+
+- **só aceita quando há UMA comunicação daquele processo naquele dia.** Com duas, não há como saber qual é esta (o mesmo processo tem intimações distintas no mesmo dia), e colar o texto errado é pior do que entregar cortado;
+- **não acrescenta "CNJ" em `fontes`.** A consulta foi por processo, e não prova que a inscrição advoga ali. Marcar apagaria o "❓ sua OAB não aparece no texto" justamente nas publicações em que ele mais importa;
+- **teto de 5 consultas por execução.** É a mesma API de que o envio do dia depende, e o limite dela é indocumentado: completar texto é conforto, tomar 429 é prazo.
+
+**O que continua sem solução:** publicação que exista só nos diários de **MG ou da União** não está no DJEN e continua saindo cortada — agora com aviso de corte no PDF e nos avisos do dia, em vez de silêncio.
+
+### ~~4. Prazo também no e-mail~~ — FEITO em 12/08/2026
 
 **Hoje:** as datas calculadas aparecem no WhatsApp e no PDF. O corpo do e-mail lista título, processo, vara e jornal.
 
-**Custo:** baixo — `src/mailer.js` já recebe as publicações; falta chamar `calcularPrazo` e imprimir, com a mesma ressalva.
+**Como ficou:** `linhaPrazo()` em `src/mailer.js` — vencimento, início da contagem, prazos ambíguos e a ressalva. Vermelho só onde há data: cor de alarme em tudo é o mesmo que cor de alarme em nada. Ver o item 1 de `docs/PENDENCIAS.md`.
 
 ---
 
@@ -92,6 +118,10 @@ Hoje ela mora no módulo do CNJ porque é lá que o HTML chega. É genérica o b
 
 O agendamento usa o Agendador de Tarefas. Um `cron` equivalente e o pipeline roda em Linux — menos o portal, que depende de um Chrome com sessão humana.
 
-### 12. Filtro de ruído no resumo do WhatsApp
+### ~~12. Filtro de ruído no resumo do WhatsApp~~ — FEITO em 21/08/2026
 
-Atos meramente ordinatórios ("ciência às partes") ocupam o mesmo espaço de um despacho com prazo. Dá para ordenar por relevância — com prazo primeiro. **Ordenar, não esconder.**
+Atos meramente ordinatórios ("ciência às partes") ocupam o mesmo espaço de um despacho com prazo. **Ordenar, não esconder** — e nada foi escondido.
+
+`ordenarPorUrgencia()` em `src/prazo.js`: primeiro o que tem vencimento calculado (o mais próximo na frente), depois prazo em horas, depois prazo ambíguo, depois sem prazo declarado, e por último data ilegível. Empate mantém a ordem de entrada.
+
+A ordenação acontece **uma vez só, em `coletar.js`** — não em cada canal. É o que garante que o item 3 do PDF seja o item 3 do WhatsApp e o item 3 do e-mail.
