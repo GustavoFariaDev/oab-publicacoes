@@ -32,6 +32,11 @@ function linhaPrazo(pub) {
   if (!p) return '';
 
   const cinza = (t) => `<br><span style="color:#666;font-size:13px">${t}</span>`;
+  // Duvida a mais, nunca publicacao a menos: acompanha a data, nao a substitui.
+  const dono = p.sujeito
+    ? `<br><span style="color:#8a6d00;font-size:13px">❓ Este prazo parece ser ${p.sujeito},
+       não seu — leitura automática da frase. Confira de quem é.</span>`
+    : '';
 
   if (p.fatal) {
     const tipo = p.tipo === 'corridos' ? 'corridos' : 'úteis';
@@ -46,13 +51,15 @@ function linhaPrazo(pub) {
             `⚠ Considera feriado local configurado à mão (${p.feriadosLocais.join(', ')}). ` +
               'Se não for feriado na comarca, o vencimento real é ANTES do exibido.',
           )
-        : '')
+        : '') +
+      dono
     );
   }
   if (p.unidade === 'horas') {
     return (
       `<br><strong style="color:#b00020">⏳ Prazo de ${p.quantidade} horas</strong>` +
-      cinza('Contado em horas a partir da intimação — sem data calculada. Confira no processo.')
+      cinza('Contado em horas a partir da intimação — sem data calculada. Confira no processo.') +
+      dono
     );
   }
   if (p.citados.length > 1) {
@@ -103,6 +110,11 @@ export async function enviarEmail({
               ${formatarPartes(p.partes).map((l) => `${escapeHtml(l)}<br>`).join('')}
               ${escapeHtml(p.vara)}<br>
               <span style="color:#666">${escapeHtml(p.jornal)}</span>
+              ${
+                p.certidao
+                  ? `<br><a href="${escapeHtml(p.certidao)}" style="font-size:13px">📄 Certidão oficial (PDF do CNJ)</a>`
+                  : ''
+              }
               ${linhaPrazo(p)}
               ${
                 oabConstaComoAdvogado(p, config.oab.numero)

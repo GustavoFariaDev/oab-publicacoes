@@ -103,6 +103,17 @@ export function escreverPrazo(doc, pub) {
   } else {
     ressalva('O texto da intimação não declara prazo — verifique o ato.');
   }
+
+  // De quem PARECE ser o prazo. Vem depois da data, nunca no lugar dela: a
+  // publicacao continua inteira e o vencimento continua exibido — o que se
+  // acrescenta e a duvida. Esconder um prazo classificado como "do perito"
+  // seria o modo de falhar que este projeto existe para evitar.
+  if (p.sujeito) {
+    doc.moveDown(0.2);
+    doc.font('Helvetica').fillColor('#8a6d00').fontSize(9);
+    doc.text(`  Este prazo parece ser ${p.sujeito}, não seu — leitura automática da frase, confira de quem é.`);
+    doc.fillColor('black');
+  }
 }
 
 /**
@@ -179,6 +190,19 @@ export function gerarPDF({ dataBR, publicacoes, avisos = [], complemento = false
       doc.font('Helvetica').text(valor);
     }
 
+    // A certidao oficial do CNJ. Este PDF aqui e conveniencia nossa: um resumo
+    // montado por um robo, sem valor nenhum nos autos. A certidao e o documento
+    // da intimacao, assinado, publico e estavel — deixar o endereco dela ao lado
+    // do texto e o que transforma o relatorio de aviso em prova.
+    if (pub.certidao) {
+      doc.font('Helvetica-Bold').text('Certidão oficial: ', { continued: true });
+      doc.font('Helvetica').fillColor('#0b5394').text(pub.certidao, {
+        link: pub.certidao,
+        underline: true,
+      });
+      doc.fillColor('black');
+    }
+
     escreverPrazo(doc, pub);
 
     // O portal recorta por nome: pode ser voce como parte, ou homonimo. Duvida
@@ -191,6 +215,19 @@ export function gerarPDF({ dataBR, publicacoes, avisos = [], complemento = false
 
     doc.moveDown(0.8);
     doc.font('Helvetica-Bold').fontSize(11).text('Intimação');
+    // Texto cortado tem que se anunciar. Este PDF promete inteiro teor, e quem
+    // le sem saber do corte acha que leu a publicacao inteira — o portal corta
+    // em ~986 caracteres, e o que fica de fora pode ser justamente a parte que
+    // diz de quem e o prazo.
+    if (/\.\.\.\s*$/.test(pub.intimacao || '')) {
+      doc.font('Helvetica').fillColor('#8a6d00').fontSize(9);
+      doc.text('Texto cortado pelo portal da OAB e não encontrado no DJEN — leia o inteiro teor no processo.');
+      doc.fillColor('black');
+    } else if (pub.textoCompletadoPor) {
+      doc.font('Helvetica').fillColor('#666').fontSize(9);
+      doc.text(`Texto completado pelo ${pub.textoCompletadoPor} — o portal o entregou cortado.`);
+      doc.fillColor('black');
+    }
     doc.moveDown(0.3);
     doc.font('Helvetica').fontSize(10).text(pub.intimacao || '(sem texto)', { align: 'justify' });
   });

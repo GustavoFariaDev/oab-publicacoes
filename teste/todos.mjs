@@ -14,6 +14,7 @@ const LOG_DESCARTAVEL = fs.mkdtempSync(path.join(os.tmpdir(), 'oab-log-'));
 const SUITES = [
   'prazo.mjs',
   'merge.mjs',
+  'inteiro-teor.mjs',
   'estado.mjs',
   'revisao.mjs',
   'saude.mjs',

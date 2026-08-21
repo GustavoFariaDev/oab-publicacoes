@@ -1,6 +1,9 @@
+import fs from 'node:fs';
+import path from 'node:path';
 import { chromium } from 'playwright';
 import { config } from './config.js';
 import { garantirChrome } from './chrome.js';
+import { log } from './log.js';
 
 /**
  * Conecta ao Chrome com porta de depuracao — abrindo-o se preciso.
@@ -87,18 +90,68 @@ export async function isCloudflareChallenge(page) {
  * @param {number} timeoutMs quanto esperar antes de considerar que travou
  * @returns {Promise<boolean>} true se o desafio AINDA esta na tela
  */
-export async function desafioCloudflarePersiste(page, timeoutMs = 15000) {
+export async function desafioCloudflarePersiste(page, timeoutMs = config.cloudflareEsperaMs) {
   if (!(await isCloudflareChallenge(page))) return false;
 
-  const limite = Date.now() + timeoutMs;
+  const t0 = Date.now();
+  const limite = t0 + timeoutMs;
   while (Date.now() < limite) {
     await page.waitForTimeout(500);
     if (!(await isCloudflareChallenge(page))) {
+      log.info(`Cloudflare: o desafio passou sozinho em ${Date.now() - t0}ms.`);
       // Passou sozinho. Deixa a pagina de destino assentar antes de devolver:
       // o desafio sai por navegacao, e quem chamou vai procurar seletores.
       await page.waitForLoadState('domcontentloaded').catch(() => {});
       return false;
     }
   }
+
+  await registrarDesafio(page, Date.now() - t0);
   return true;
+}
+
+/**
+ * Guarda o que se via na tela quando o desafio nao passou.
+ *
+ * Existe porque a falha das 14h nao deixava rastro nenhum: o log dizia
+ * "desafio da Cloudflare" e acabava ali, sem dizer em que endereco, em que
+ * tipo de desafio, nem se havia caixa para alguem clicar. Sem isso, todo
+ * conserto vira palpite — foi assim que "esperar mais" passou tres dias sendo
+ * hipotese em vez de medida.
+ *
+ * Best-effort de proposito: um erro AQUI nao pode substituir o erro real da
+ * coleta, que e o que o retry e o guarda-noturno leem.
+ */
+async function registrarDesafio(page, esperouMs) {
+  const dados = { url: page.url(), esperouMs };
+  try {
+    dados.titulo = await page.title();
+    // O interativo tem a caixa "Confirme que e humano" (widget do Turnstile);
+    // o nao-interativo nao tem nada em que clicar. Sao problemas diferentes:
+    // um espera o usuario, o outro so espera. Dizer qual e os separa.
+    dados.interativo =
+      (await page
+        .locator('iframe[src*="challenges.cloudflare.com"], .cf-turnstile, #cf-turnstile')
+        .count()) > 0;
+  } catch (e) {
+    dados.erroLeitura = e.message;
+  }
+
+  try {
+    const dir = path.join(config.paths.out, new Date().toISOString().slice(0, 10));
+    fs.mkdirSync(dir, { recursive: true });
+    const carimbo = new Date().toISOString().slice(11, 19).replace(/:/g, '');
+    const print = path.join(dir, `cloudflare-${carimbo}.png`);
+    await page.screenshot({ path: print, fullPage: false });
+    dados.print = print;
+    // O HTML responde o que o print nao responde: qual desafio, que cookie
+    // faltou, que script travou.
+    const html = path.join(dir, `cloudflare-${carimbo}.html`);
+    fs.writeFileSync(html, await page.content(), 'utf8');
+    dados.html = html;
+  } catch (e) {
+    dados.erroPrint = e.message;
+  }
+
+  log.warn(`Cloudflare: desafio NAO passou — ${JSON.stringify(dados)}`);
 }

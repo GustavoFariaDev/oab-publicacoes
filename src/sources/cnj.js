@@ -220,6 +220,36 @@ async function consultarVariante({ oab, ufOab, dataISO }) {
 }
 
 /**
+ * Busca as comunicacoes de UM processo num dia — pelo numero, nao pela OAB.
+ *
+ * Serve a um caso so: completar o texto de uma publicacao que veio cortada do
+ * portal e que a consulta por inscricao nao trouxe. Ver src/inteiro-teor.js.
+ *
+ * Consulta por processo acha coisa que a consulta por inscricao nao acha: o
+ * portal recorta por NOME e pega processo em que a pessoa e parte, ou em que
+ * outro advogado esta constituido — e nesses a busca por OAB volta vazia. Foi
+ * exatamente o caso de 19/08/2026: a unica publicacao que so o portal trouxe
+ * estava no DJEN, com id proprio, invisivel pela inscricao.
+ *
+ * NAO tem retentativa de paginacao: uma pagina basta para um processo num dia.
+ * Se falhar, quem chamou continua com o texto cortado — que e o que ja tinha.
+ */
+export async function buscarPorProcesso(numeroProcesso, dataBR) {
+  const digitos = normalizarProcesso(numeroProcesso);
+  if (!digitos) return [];
+  const dataISO = brToISO(dataBR);
+
+  const url =
+    `${BASE}?numeroProcesso=${encodeURIComponent(digitos)}` +
+    `&dataDisponibilizacaoInicio=${dataISO}&dataDisponibilizacaoFim=${dataISO}` +
+    `&pagina=1&itensPorPagina=${POR_PAGINA}`;
+
+  const resposta = await buscarComRetry(url, { rotulo: `processo ${digitos}` });
+  const corpo = await resposta.json();
+  return (Array.isArray(corpo.items) ? corpo.items : []).map(paraPublicacao);
+}
+
+/**
  * Entidades HTML que aparecem de fato no texto dos tribunais.
  * O que nao estiver aqui passa cru ("&rsquo;") em vez de sumir — feio, mas
  * visivel, que e melhor do que perder um pedaco do texto da intimacao.
@@ -267,11 +297,28 @@ export function htmlParaTexto(html = '') {
     .trim();
 }
 
+/**
+ * Certidao oficial da comunicacao, em PDF publico.
+ *
+ * Cada comunicacao do DJEN vem com um `hash`, e esse endereco devolve a
+ * certidao assinada daquela intimacao — o documento oficial, nao o nosso
+ * resumo dela. E o que separa "aviso" de "prova": o PDF que este projeto gera
+ * e uma conveniencia nossa, a certidao e do CNJ.
+ *
+ * Conferido em 21/08/2026 contra as duas comunicacoes de 20/08: HTTP 200,
+ * application/pdf, 126 KB e 61 KB. Nao pede autenticacao — mas, como o resto
+ * da API, so responde a IP brasileiro.
+ */
+export function urlCertidao(hash) {
+  return hash ? `${BASE}/${encodeURIComponent(hash)}/certidao` : '';
+}
+
 /** Converte o item da API para o formato comum das duas fontes. */
 function paraPublicacao(item) {
   return {
     fonte: 'CNJ',
     identificador: String(item.id ?? item.hash ?? ''),
+    certidao: urlCertidao(item.hash),
     dataDisponibilizacao: item.datadisponibilizacao || '',
     dataPublicacao: '',
     jornal: item.meiocompleto || 'Diário de Justiça Eletrônico Nacional',

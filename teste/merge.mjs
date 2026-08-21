@@ -139,5 +139,25 @@ eq(
 eq('parte sem nome e ignorada', formatarPartes([{ nome: '', polo: 'A' }]), []);
 eq('polo desconhecido passa cru', formatarPartes([{ nome: 'X', polo: 'T' }]), ['T: X']);
 
+// --- Certidao oficial: so o CNJ tem, e ela nao pode se perder na uniao ---
+{
+  // O grupo e criado pelo PORTAL (que nao tem certidao) e so depois o CNJ
+  // chega. Sem o campo na lista de merge, o link oficial sumia justamente nas
+  // publicacoes que existem nas duas fontes.
+  const r = unir({
+    Portal: [pub('Portal', { identificador: 'x' })],
+    CNJ: [pub('CNJ', { identificador: 'x', certidao: 'https://exemplo/certidao' })],
+  });
+  eq('as duas fontes viraram uma', r.publicacoes.length, 1);
+  eq('a certidao do CNJ sobrevive a uniao', r.publicacoes[0].certidao, 'https://exemplo/certidao');
+}
+
+{
+  // Publicacao que so existe no portal continua sem certidao — e isso e
+  // correto: nao ha certidao do CNJ para um ato que nao passou pelo DJEN.
+  const r = unir({ Portal: [pub('Portal', { identificador: 'y' })] });
+  eq('portal sozinho nao inventa certidao', r.publicacoes[0].certidao ?? null, null);
+}
+
 console.log(`\n${ok} ok, ${mal} falha(s)`);
 process.exitCode = mal ? 1 : 0;

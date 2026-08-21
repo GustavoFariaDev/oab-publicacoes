@@ -1,4 +1,7 @@
-import { calcularPrazo, diaUtilSeguinte, deBR, paraBR, ehDiaUtil, prazosDeclarados, resumirPrazo } from '../src/prazo.js';
+import {
+  calcularPrazo, diaUtilSeguinte, deBR, paraBR, ehDiaUtil, prazosDeclarados, resumirPrazo,
+  sujeitoDoPrazo, ordenarPorUrgencia,
+} from '../src/prazo.js';
 import { htmlParaTexto } from '../src/sources/cnj.js';
 import { escreverPrazo } from '../src/pdf.js';
 
@@ -181,6 +184,77 @@ eq('PDF: horas aparecem', t4.includes('48 horas'), true);
 const t5 = bloco({ dataDisponibilizacao: '12/08/2026' });
 eq('PDF: sem intimacao ainda mostra a contagem', t5.includes('14/08/2026'), true);
 eq('PDF: sem intimacao avisa que nao ha prazo', t5.includes('não declara prazo'), true);
+
+// --- De quem PARECE ser o prazo (marca duvida, nunca esconde) ---
+const sujeito = (texto) => {
+  const d = prazosDeclarados(texto);
+  return d.length ? sujeitoDoPrazo(d[0].contexto) : 'SEM PRAZO';
+};
+
+eq('perito e reconhecido', sujeito('o perito devera se manifestar em cinco dias'), 'do perito');
+eq('MP e reconhecido', sujeito('Manifeste-se o Ministério Público em 10 dias'), 'do Ministério Público');
+eq('contadoria e reconhecida', sujeito('Remetam-se os autos à contadoria judicial para cálculo em 30 dias'), 'da contadoria');
+eq('oficial de justica e reconhecido', sujeito('Intime-se o oficial de justiça para cumprir em 5 dias'), 'do oficial de justiça');
+// O ponto todo da heuristica: quem esta MAIS PERTO do prazo manda.
+eq(
+  'parte mais perto do prazo cala a marcacao',
+  sujeito('o perito apresentara laudo; após, as partes serão intimadas para, no prazo de quinze dias, manifestar-se'),
+  null,
+);
+eq('advogado nao e marcado', sujeito('Fica intimado o advogado para, no prazo de 15 dias, contestar'), null);
+eq('sem ator nenhum nao inventa sujeito', sujeito('Fica intimado para, no prazo de 15 dias, manifestar-se'), null);
+// "Reu" e "autor" ficam DE FORA da lista de auxiliares: podem ser o cliente.
+eq('reu nao e marcado como terceiro', sujeito('o réu deverá se manifestar em 15 dias'), null);
+
+{
+  const pub = {
+    dataDisponibilizacao: '12/08/2026',
+    intimacao: 'Manifeste-se o perito, apresentando o laudo no prazo de 30 (trinta) dias.',
+  };
+  const p = calcularPrazo(pub);
+  eq('sujeito chega ao resultado', p.sujeito, 'do perito');
+  // O que nao pode acontecer de jeito nenhum: sumir com a data.
+  eq('marcar o sujeito NAO apaga o vencimento', p.fatal, '25/09/2026');
+  eq('e o zap diz a duvida', resumirPrazo(pub).includes('parece ser do perito'), true);
+  eq('sem apagar a data no zap', resumirPrazo(pub).includes('25/09/2026'), true);
+}
+
+{
+  // Mesmo prazo citado duas vezes com sujeitos diferentes: cala.
+  const p = calcularPrazo({
+    dataDisponibilizacao: '12/08/2026',
+    intimacao: 'o perito falará em 15 dias. Depois, as partes se manifestarão no prazo de 15 dias.',
+  });
+  eq('sujeitos divergentes para o mesmo prazo: nao marca', p.sujeito, null);
+  eq('mas continua sendo prazo unico', p.quantidade, 15);
+}
+
+// --- Ordem por urgencia: ordena, nao esconde ---
+{
+  const semPrazo = { id: 'sem', dataDisponibilizacao: '12/08/2026', intimacao: 'Ciência às partes.' };
+  const vence03 = { id: '03/09', dataDisponibilizacao: '12/08/2026', intimacao: 'no prazo de 15 dias' };
+  const vence21 = { id: '21/08', dataDisponibilizacao: '12/08/2026', intimacao: 'no prazo de 5 dias' };
+  const ambiguo = { id: 'ambiguo', dataDisponibilizacao: '12/08/2026', intimacao: 'em cinco dias ... em trinta dias' };
+  const horas = { id: 'horas', dataDisponibilizacao: '12/08/2026', intimacao: 'no prazo de 48 horas' };
+  const ilegivel = { id: 'ilegivel', dataDisponibilizacao: 'ontem', intimacao: 'no prazo de 15 dias' };
+
+  const ordem = ordenarPorUrgencia([semPrazo, ambiguo, vence03, ilegivel, horas, vence21]).map((p) => p.id);
+  eq('vencimento mais proximo vem primeiro', ordem[0], '21/08');
+  eq('depois o vencimento mais distante', ordem[1], '03/09');
+  eq('horas vem depois das datas', ordem[2], 'horas');
+  eq('ambiguo depois das horas', ordem[3], 'ambiguo');
+  eq('sem prazo antes de data ilegivel', ordem[4], 'sem');
+  eq('data ilegivel por ultimo', ordem[5], 'ilegivel');
+  eq('nenhuma publicacao some na ordenacao', ordem.length, 6);
+}
+
+{
+  // Empate mantem a ordem de entrada (sort estavel): duas sem prazo nenhum.
+  const a = { id: 'a', dataDisponibilizacao: '12/08/2026', intimacao: 'Ciência.' };
+  const b = { id: 'b', dataDisponibilizacao: '12/08/2026', intimacao: 'Ciência.' };
+  eq('empate preserva a ordem de entrada', ordenarPorUrgencia([a, b]).map((p) => p.id).join(), 'a,b');
+  eq('lista vazia nao quebra', ordenarPorUrgencia([]).length, 0);
+}
 
 console.log(`\n${ok} ok, ${mal} falha(s)`);
 process.exitCode = mal ? 1 : 0;

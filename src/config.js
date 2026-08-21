@@ -144,6 +144,21 @@ export const config = {
   // o usuario abre e autentica (ver src/browser.js).
   navTimeoutMs: Number(process.env.NAV_TIMEOUT_MS || 45000),
 
+  /**
+   * Quanto esperar o Turnstile nao-interativo passar sozinho antes de dizer
+   * que o desafio travou.
+   *
+   * Era 15s, e 15s era pouco: de 18 a 20/08/2026 TODA execucao das 14h morreu
+   * em exatamente 15s com "desafio da Cloudflare", e o run das 16h — mesmo
+   * navegador, mesma sessao — entrava sem desafio nenhum. Medido a mao em
+   * 21/08 com o navegador ja aquecido, o mesmo desafio saiu em 3,4s.
+   *
+   * O custo de esperar mais e limitado ao caso que HOJE ja fracassa: quem
+   * passa, passa em segundos e volta na hora. Quem nao passa perde meio minuto
+   * a mais numa coleta que ia perder o portal de qualquer jeito.
+   */
+  cloudflareEsperaMs: Number(process.env.CLOUDFLARE_ESPERA_MS || 45000),
+
   // O portal so entra na coleta quando explicitamente ligado: ele depende de
   // uma sessao viva no Chrome real (Cloudflare Turnstile), e ficar tentando
   // sem sessao so gera ruido. A API do CNJ funciona sempre.

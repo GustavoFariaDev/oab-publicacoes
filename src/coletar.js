@@ -1,7 +1,8 @@
 import { config } from './config.js';
 import { log } from './log.js';
 import { unir } from './merge.js';
-import { deBR, ehDiaUtil } from './prazo.js';
+import { completarInteiroTeor } from './inteiro-teor.js';
+import { deBR, ehDiaUtil, ordenarPorUrgencia } from './prazo.js';
 import { buscarNoCNJ } from './sources/cnj.js';
 import { buscarNoPortal } from './sources/portal.js';
 
@@ -98,5 +99,26 @@ export async function coletar(dataBR) {
   }
 
   const resultado = unir(porFonte);
-  return { ...resultado, avisos: [...avisos, ...resultado.avisos], completo, falhas, screenshotPath };
+
+  // O portal corta a intimacao em ~986 caracteres. Onde a publicacao tambem
+  // veio do CNJ, a uniao ja ficou com o texto inteiro; o que sobra aqui sao as
+  // que so o portal trouxe. Roda DEPOIS da uniao de proposito: antes dela,
+  // toda publicacao do portal pareceria cortada e a consulta seria paga por
+  // publicacao que ja tinha texto inteiro do outro lado.
+  const teor = await completarInteiroTeor(resultado.publicacoes);
+  avisos.push(...teor.avisos);
+
+  // A ordem sai daqui, e nao de cada canal, para o item "3" do PDF ser o mesmo
+  // item "3" do WhatsApp e do e-mail. Ordena por urgencia: o que tem data de
+  // vencimento primeiro (a mais proxima na frente), o resto depois, na ordem
+  // em que veio. Nada e escondido — ver ordenarPorUrgencia.
+  const publicacoes = ordenarPorUrgencia(teor.publicacoes);
+  return {
+    ...resultado,
+    publicacoes,
+    avisos: [...avisos, ...resultado.avisos],
+    completo,
+    falhas,
+    screenshotPath,
+  };
 }

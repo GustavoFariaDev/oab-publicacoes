@@ -16,6 +16,7 @@ import { normalizarProcesso } from './sources/cnj.js';
  * @property {string} numeroProcesso
  * @property {string} intimacao
  * @property {string} [link]
+ * @property {string} [certidao]  certidao oficial em PDF (so a API do CNJ tem)
  * @property {{nome: string, polo: string}[]} [partes]
  * @property {string[]} [advogados]
  * @property {string[]} [fontes]
@@ -243,7 +244,11 @@ export function unir(porFonte) {
 
       alvo.fontes.push(fonte);
       alvo.identificadores[fonte] = pub.identificador;
-      for (const campo of ['dataPublicacao', 'pagina', 'link', 'tribunal', 'vara', 'caderno']) {
+      // `certidao` entra aqui de proposito: quando a publicacao existe nas
+      // duas fontes, o grupo pode ter sido criado pelo portal — que nao tem
+      // certidao nenhuma —, e sem esta linha o link oficial que o CNJ trouxe
+      // se perderia na uniao.
+      for (const campo of ['dataPublicacao', 'pagina', 'link', 'tribunal', 'vara', 'caderno', 'certidao']) {
         if (!alvo[campo] && pub[campo]) alvo[campo] = pub[campo];
       }
       // Listas ficam de fora do laco acima: [] e truthy, entao "!alvo[campo]"

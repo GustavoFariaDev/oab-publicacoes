@@ -283,9 +283,101 @@ export function prazosDeclarados(texto = '') {
     const qualificador = (m[3] || '').toLowerCase();
     // Sem qualificador vale a regra do art. 219: prazo processual em dias uteis.
     const tipo = qualificador.includes('corrido') ? 'corridos' : 'uteis';
-    achados.push({ quantidade, unidade, tipo });
+    // O trecho ANTERIOR ao prazo, que e onde mora o sujeito da frase
+    // ("o perito devera ... em cinco dias"). Ver sujeitoDoPrazo.
+    const contexto = texto.slice(Math.max(0, m.index - JANELA_SUJEITO), m.index);
+    achados.push({ quantidade, unidade, tipo, contexto });
   }
   return achados;
+}
+
+/**
+ * Quanto texto antes do prazo vale a pena olhar para achar o sujeito.
+ *
+ * ~300 caracteres e da ordem de 50 palavras: pega a oracao em que o prazo esta
+ * e a anterior, sem atravessar o paragrafo inteiro e capturar um figurante que
+ * nada tem a ver com aquele prazo.
+ */
+const JANELA_SUJEITO = 300;
+
+/**
+ * Auxiliares do juizo — gente que NUNCA e o advogado constituido.
+ *
+ * A lista e curta de proposito. "Reu", "autor", "requerido", "executado" ficam
+ * DE FORA: qualquer um deles pode ser o seu cliente, e marcar "parece ser do
+ * reu" numa intimacao que e sua seria transformar a rede de seguranca em
+ * ruido — e alerta ruidoso e alerta ignorado. Aqui so entra quem, se for o
+ * sujeito do prazo, com certeza nao e voce.
+ */
+const AUXILIARES = [
+  [/\bperit[oa]s?\b|\bexpert[oa]\b/i, 'do perito'],
+  [/minist[ée]rio\s+p[úu]blico|\bpromotor|\bprocurador(?:a)?\s+de\s+justi[çc]a|\bparquet\b/i, 'do Ministério Público'],
+  [/\bcontador(?:ia)?\s+judicial|\bcontadoria\b/i, 'da contadoria'],
+  [/\bserventia\b|\bcart[óo]rio\b|\bescriv[ãa]o\b|\bchefe\s+de\s+secretaria\b/i, 'da serventia'],
+  [/oficial\s+de\s+justi[çc]a/i, 'do oficial de justiça'],
+  [/\bleiloeir[oa]\b/i, 'do leiloeiro'],
+  [/administrador(?:a)?\s+judicial/i, 'do administrador judicial'],
+  [/\bdepositári[oa]\b|\bdepositari[oa]\b/i, 'do depositário'],
+  [/\bint[ée]rprete\b|\btradutor(?:a)?\b/i, 'do intérprete'],
+  [/\bcurador(?:a)?\s+especial\b/i, 'do curador especial'],
+];
+
+/**
+ * Partes e seus procuradores — qualquer um deles PODE ser voce.
+ *
+ * Nao servem para marcar nada; servem para CALAR a marcacao. Se o ator
+ * mencionado mais perto do prazo e "as partes", o prazo pode perfeitamente ser
+ * seu, e a ressalva de auxiliar mencionado la atras seria falso alarme.
+ */
+const PARTES = /\bpartes?\b|\baut(?:or|ora)\b|\br[ée]u\b|\br[ée]s\b|\brequerid[oa]s?\b|\brequerente\b|\bexequente\b|\bexecutad[oa]s?\b|\bembargante\b|\bembargad[oa]\b|\bapelante\b|\bapelad[oa]\b|\bagravante\b|\bagravad[oa]\b|\bimpetrante\b|\bpatron[oa]\b|\badvogad[oa]s?\b|\bprocurador(?:es)?\s+d[oae]s?\b|\bintimad[oa]\b|\bintime-se\b/i;
+
+/**
+ * De quem PARECE ser este prazo — quando parece ser de outra pessoa.
+ *
+ * Ataca o limite central do projeto: hoje um ato com prazo unico dirigido ao
+ * perito sai com data de vencimento como se fosse seu. O caso real esta na
+ * nota de calcularPrazo (despacho de 12/08/2026, quatro prazos, nenhum do
+ * advogado) — aquele texto ja e protegido pela regra do prazo unico, mas um
+ * despacho que so mande o perito entregar o laudo em trinta dias nao e.
+ *
+ * REGRA DE OURO, e o motivo desta funcao ser tao timida: ela MARCA DUVIDA,
+ * nunca esconde. O retorno nao remove publicacao, nao apaga vencimento e nao
+ * muda data nenhuma — vira uma linha a mais na saida. Um prazo classificado
+ * como "do perito" e omitido seria exatamente o modo de falhar que o projeto
+ * inteiro existe para evitar.
+ *
+ * Como decide: vence quem esta MAIS PERTO do prazo, nao quem aparece primeiro.
+ * Em "o perito devera se manifestar em cinco dias ... apos o que as partes
+ * serao intimadas no prazo de quinze dias", o sujeito do prazo de quinze e
+ * "as partes" — e se o ator mais proximo for uma parte (ou um advogado), esta
+ * funcao se cala, porque a parte pode ser o seu cliente.
+ *
+ * @param {string} contexto  o texto imediatamente anterior ao prazo
+ * @returns {string|null} ex.: "do perito"; null quando nao da para dizer
+ */
+export function sujeitoDoPrazo(contexto = '') {
+  let melhor = null;
+
+  for (const [re, rotulo] of AUXILIARES) {
+    const pos = ultimaPosicao(contexto, re);
+    if (pos >= 0 && (!melhor || pos > melhor.pos)) melhor = { pos, rotulo };
+  }
+  if (!melhor) return null;
+
+  // Alguma parte (ou o proprio advogado) e mencionada DEPOIS do auxiliar, mais
+  // perto do prazo? Entao o prazo provavelmente e dela, e nao ha o que marcar.
+  const posParte = ultimaPosicao(contexto, PARTES);
+  if (posParte > melhor.pos) return null;
+
+  return melhor.rotulo;
+}
+
+/** Posicao da ULTIMA ocorrencia do padrao no texto; -1 se nao houver. */
+function ultimaPosicao(texto, re) {
+  const global = new RegExp(re.source, re.flags.includes('g') ? re.flags : `${re.flags}g`);
+  let ultima = -1;
+  for (const m of texto.matchAll(global)) ultima = m.index;
+  return ultima;
 }
 
 /**
@@ -341,6 +433,13 @@ export function calcularPrazo(pub) {
   ];
   const unico = distintos.length === 1 ? distintos[0] : null;
 
+  // De quem PARECE ser o prazo. So faz sentido perguntar quando ha um prazo
+  // unico — que e justamente o caso em que uma data e estampada como se fosse
+  // sua. Se o mesmo prazo aparece mais de uma vez com sujeitos diferentes
+  // ("o perito ... em 15 dias" e "as partes ... em 15 dias"), a funcao se cala:
+  // marcar o sujeito errado e pior do que nao marcar nenhum.
+  const sujeito = unico ? sujeitoUnanime(declarados, unico) : null;
+
   let fatal = null;
   // Prazo em horas nao ganha data calculada nem quando e unico: a contagem corre
   // em horas a partir da intimacao, nao em dias a partir do inicio.
@@ -362,10 +461,68 @@ export function calcularPrazo(pub) {
     unidade: unico?.unidade ?? null,
     tipo: unico?.tipo ?? null,
     citados: distintos.map(({ quantidade, unidade }) => ({ quantidade, unidade })),
+    sujeito,
     // Do inicio da contagem ate o vencimento: e o trecho em que um feriado
     // local muda a data. Fora dele, ele nao influenciou nada.
     feriadosLocais: fatal ? feriadosLocaisNoIntervalo(inicio, fatal, comarca) : [],
   };
+}
+
+/**
+ * O sujeito do prazo, se TODAS as ocorrencias dele apontarem para o mesmo.
+ * Divergiu, ou alguma ficou sem sujeito reconhecido: devolve null.
+ */
+function sujeitoUnanime(declarados, unico) {
+  const mesmas = declarados.filter(
+    (p) => p.quantidade === unico.quantidade && p.unidade === unico.unidade && p.tipo === unico.tipo,
+  );
+  const sujeitos = mesmas.map((p) => sujeitoDoPrazo(p.contexto));
+  const primeiro = sujeitos[0] ?? null;
+  return sujeitos.every((s) => s === primeiro) ? primeiro : null;
+}
+
+/**
+ * Ordena as publicacoes por urgencia: quem tem data de vencimento primeiro, e
+ * entre essas, a que vence antes.
+ *
+ * ORDENA, NAO ESCONDE — nada sai da lista, e a numeracao do PDF, do e-mail e
+ * do WhatsApp continua sendo a mesma porque todos recebem este mesmo array (a
+ * ordenacao acontece uma vez so, na coleta).
+ *
+ * Motivo: um ato meramente ordinatorio ("ciencia as partes") ocupa na tela do
+ * celular o mesmo espaco de um despacho que vence em tres dias. Quem le de
+ * cima para baixo tem que encontrar primeiro o que tem hora marcada.
+ *
+ * A ordem entre as faixas: vencimento calculado > prazo em horas > prazo
+ * ambiguo (mais de um no texto) > sem prazo declarado > data ilegivel. As tres
+ * ultimas nao tem data para comparar, e ficam na ordem em que ja estavam
+ * (Array.prototype.sort e estavel).
+ */
+export function ordenarPorUrgencia(publicacoes = []) {
+  const faixa = (p) => {
+    if (!p) return 4;
+    if (p.fatal) return 0;
+    if (p.unidade === 'horas') return 1;
+    if (p.citados.length > 1) return 2;
+    return 3;
+  };
+
+  return publicacoes
+    .map((pub, i) => ({ pub, i, prazo: calcularPrazo(pub) }))
+    .sort((a, b) => {
+      const fa = faixa(a.prazo);
+      const fb = faixa(b.prazo);
+      if (fa !== fb) return fa - fb;
+      if (fa === 0) {
+        // Comparacao por Date, nao pelo texto: "03/09" e "21/08" em dd/mm/aaaa
+        // se ordenam ao contrario como string.
+        const da = deBR(a.prazo.fatal);
+        const db = deBR(b.prazo.fatal);
+        if (da && db && da.getTime() !== db.getTime()) return da - db;
+      }
+      return a.i - b.i;
+    })
+    .map(({ pub }) => pub);
 }
 
 /** "15 dias úteis", "48 horas" — como se le, com acento. */
@@ -379,14 +536,19 @@ export function resumirPrazo(pub) {
   const p = calcularPrazo(pub);
   if (!p) return null;
 
+  // A ressalva de sujeito acompanha QUALQUER linha de prazo, e nunca no lugar
+  // da data: ela e uma duvida a mais, nao uma publicacao a menos.
+  const dono = p.sujeito ? `
+❓ Este prazo parece ser ${p.sujeito}, não seu — confira de quem é.` : '';
+
   if (p.fatal) {
     const local = p.feriadosLocais.length
       ? ` [considera feriado local: ${p.feriadosLocais.join(', ')}]`
       : '';
-    return `⏳ ${porExtenso(p)} — vence ${p.fatal} (estimativa, confira)${local}`;
+    return `⏳ ${porExtenso(p)} — vence ${p.fatal} (estimativa, confira)${local}${dono}`;
   }
   if (p.unidade === 'horas') {
-    return `⏳ ${p.quantidade} horas a contar da intimação — contagem começa ${p.inicio} (confira)`;
+    return `⏳ ${p.quantidade} horas a contar da intimação — contagem começa ${p.inicio} (confira)${dono}`;
   }
   if (p.citados.length > 1) {
     // Sem data: o texto tem mais de um prazo e nenhum deles e assumido como seu.
