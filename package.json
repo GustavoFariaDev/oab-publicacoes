@@ -15,6 +15,7 @@
     "setup:whatsapp": "node scripts/setup-whatsapp.js",
     "register-task": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/register-task.ps1",
     "abrir-chrome": "node scripts/abrir-chrome.js",
+    "aquecer": "node scripts/aquecer-sessao.js",
     "explorar": "node scripts/explorar.js",
     "checar": "node scripts/checar-dia.js"
   },

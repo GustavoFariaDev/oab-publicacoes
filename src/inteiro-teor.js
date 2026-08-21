@@ -25,9 +25,22 @@ import { buscarPorProcesso } from './sources/cnj.js';
  * unica publicacao portal-only de 19/08: HTTP 200, uma comunicacao, texto
  * completo de 802 caracteres.
  *
- * O QUE ISTO NAO RESOLVE, e nao adianta fingir que resolve: publicacao que
- * exista SO nos diarios de MG ou da Uniao nao esta no DJEN, e continua saindo
- * cortada. O aviso de corte no PDF e o que sobra para essas.
+ * O QUE ISTO NAO RESOLVE. Duas coisas, e a primeira NAO e a que parecia.
+ *
+ * Escrevi aqui, antes de medir, que publicacao de MG ou da Uniao nao esta no
+ * DJEN. Estava errado: medido em 21/08/2026 nos dias 14 a 21/08, das 5
+ * publicacoes que so o portal trouxe, 4 estavam no DJEN — inclusive uma do
+ * Diario de Minas Gerais e uma do Diario da Uniao. O que as esconde nao e o
+ * diario, e a CONSULTA: a busca por inscricao nao acha o que nao esta em nome
+ * da sua OAB.
+ *
+ * O que de fato continua cortado:
+ *   - processo com MAIS DE UMA comunicacao naquele dia. A guarda se recusa a
+ *     escolher, e e o caso real de 21/08 (o processo de MG tinha duas);
+ *   - processo com numeracao antiga, fora do padrao CNJ ("934/15", visto em
+ *     20/08). Consultar por numero de processo nem se aplica ali.
+ *
+ * O aviso de corte no PDF e o que sobra para essas.
  */
 
 /** O portal corta a intimacao e marca o corte com reticencias. */

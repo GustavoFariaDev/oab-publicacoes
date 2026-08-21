@@ -21,7 +21,13 @@ Nos três dias, o run das **14h** perdeu a fonte Portal com *"o desafio da Cloud
 
 **O que já foi feito (21/08):** a espera subiu de 15s para 45s (`CLOUDFLARE_ESPERA_MS`) e, quando ela estoura, ficam gravados **print, HTML, URL e se há caixa para clicar** (`out/<data>/cloudflare-*.png`). Antes disso a falha diária não deixava rastro nenhum — o log dizia "desafio da Cloudflare" e acabava ali, e por isso "é só esperar mais" passou três dias sendo palpite em vez de medida.
 
-**O que fazer:** olhar o próximo estouro. O print responde a pergunta que os logs não respondem: se o desafio é o **interativo** (tem caixa, espera gente) ou o **não-interativo** (não tem, só demora). São problemas diferentes — um pede o clique do Gus, o outro pede tempo, e agora dá para saber qual é sem adivinhar.
+**O que também foi feito (21/08):** as tarefas **`aquecer 08h`** e **`aquecer 13h50`** (`scripts/aquecer-sessao.js`). Ela ataca a causa provável em vez do sintoma: como o desafio só aparece no *login*, e o login só acontece porque a sessão envelheceu durante a noite, tocar o portal de manhã tira o login do caminho das 14h. Se o cookie for de expiração deslizante, some até o login. Não acorda a máquina, e quando o desafio exige clique de gente ela avisa **de manhã**, com horas de folga, em vez de às 14h contando que já deu errado.
+
+Por que **duas**: o cookie da sessão é um `ASP.NET_SessionId` sem data de validade — quem conta o tempo é o servidor, por inatividade. Medida, a sessão estava viva depois de 3h parada e morta depois de ~19h; o limite está entre os dois e não dá para saber onde. Um toque de manhã pode não alcançar as 14h, e o das 13h50 fecha essa lacuna para qualquer limite plausível. Se ainda assim a sessão tiver caído, o login acontece **fora do caminho crítico**.
+
+**Como saber se resolveu:** os logs de 24/08 em diante (segunda-feira). O que se espera ver no run das 14h é `Portal: resumo do dia indica N` sem nenhuma linha de login antes.
+
+**O que fazer se não resolver:** olhar o próximo estouro. O print responde a pergunta que os logs não respondem: se o desafio é o **interativo** (tem caixa, espera gente) ou o **não-interativo** (não tem, só demora). São problemas diferentes — um pede o clique do Gus, o outro pede tempo, e agora dá para saber qual é sem adivinhar.
 
 ---
 
@@ -146,6 +152,26 @@ O `sendMessage` volta **antes de a mensagem sair**, e o `destroy()` do bloco `fi
 
 ---
 
+## 4b. Dá para aposentar o portal? — MEDIDO em 21/08/2026: **não**
+
+A ideia era tentadora: se desde 16/05/2025 todo tribunal publica pelo DJEN, o portal talvez só agregasse hoje o Diário da União — e aí a segunda fonte poderia sair da API livre, sem navegador, sem sessão e sem Cloudflare.
+
+**Medido nos dias 14 a 21/08**, comparando as duas fontes e conferindo cada publicação exclusiva do portal na API do CNJ pelo número do processo:
+
+| | |
+|---|---|
+| Publicações que só o portal trouxe | 5 (em 5 dias úteis; 17/08 não pôde ser medido) |
+| Delas, presentes no DJEN | **4** |
+| Delas, ausentes | 1 — e é um processo de numeração antiga (`934/15`), onde a consulta por número nem se aplica |
+
+**A conclusão é o oposto da hipótese, e é o que mantém o portal de pé.** O que o portal acha e a API não acha *não* está fora do DJEN — está fora do **alcance da consulta**. A API é consultada por inscrição e só devolve o que está em nome da sua OAB; o portal recorta por **nome**, e por isso pega processo em que você é parte, ou em que outro advogado está constituído. Uma publicação de Minas Gerais e uma da União apareceram assim.
+
+Não há como pedir isso à API: ela não consulta por nome. Então o portal não é redundância — é a única fonte de uma classe inteira de publicação, e sai da lista de candidatos a aposentadoria.
+
+O caminho que sobra para tirar a Cloudflare do caminho é o outro: **não precisar relogar** (item 0).
+
+---
+
 <a id="5-as-fontes-divergem--e-cada-divergencia-significa-uma-coisa"></a>
 
 ## 5. As fontes divergem — e cada divergencia significa uma coisa
@@ -186,7 +212,7 @@ O portal corta a intimação em ~986 caracteres — **todas elas**, e não só a
 
 **Como ficou:** `src/inteiro-teor.js` busca a publicação cortada na API do CNJ **pelo número do processo** — ela é invisível à consulta por inscrição quando o advogado não está constituído ali, mas continua no DJEN com o texto inteiro. No dry run de 19/08, as duas publicações portal-only foram completadas. Detalhes e as guardas em `docs/MELHORIAS.md`, item 3b.
 
-**O limite:** publicação que exista só nos diários de **MG ou da União** não está no DJEN e continua saindo cortada. A diferença é que agora ela **diz** que está cortada — no PDF e nos avisos do dia — em vez de parecer inteira.
+**O limite, medido e não suposto:** das 5 publicações que só o portal trouxe entre 14 e 21/08, **4 estavam no DJEN** e foram completáveis. O que sobra são dois casos — processo com mais de uma comunicação no mesmo dia (o robô se recusa a escolher) e processo de numeração antiga fora do padrão CNJ. Os dois saem **dizendo** que estão cortados, em vez de parecerem inteiros.
 
 ---
 

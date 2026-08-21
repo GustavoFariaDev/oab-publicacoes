@@ -70,7 +70,7 @@ Dia que a revisão **cria do zero** — o robô estava desligado naquele dia —
 | Texto da intimação | inteiro teor | prévia cortada em ~986 caracteres |
 | Confiabilidade | alta | depende de sessão viva no Chrome |
 
-O portal **corta a intimação em ~986 caracteres, em todas elas** — medido em 21/08/2026 contra as sete publicações de 19/08. Onde a publicação também vem da API, a união fica com o texto inteiro. Onde ela só existe no portal, o texto é buscado no DJEN **pelo número do processo**: a publicação some da consulta por inscrição quando você não está constituído ali, mas continua no diário, com inteiro teor e certidão. O que nem assim aparece — publicação exclusiva dos diários de MG ou da União — sai **dizendo que está cortada**, em vez de parecer inteira.
+O portal **corta a intimação em ~986 caracteres, em todas elas** — medido em 21/08/2026 contra as sete publicações de 19/08. Onde a publicação também vem da API, a união fica com o texto inteiro. Onde ela só existe no portal, o texto é buscado no DJEN **pelo número do processo**: a publicação some da consulta por inscrição quando você não está constituído ali, mas continua no diário, com inteiro teor e certidão. O que nem assim aparece sai **dizendo que está cortada**, em vez de parecer inteira: processo com mais de uma comunicação no mesmo dia (o robô se recusa a escolher qual é qual) e processo de numeração antiga, fora do padrão CNJ.
 
 Elas são unidas, não escolhidas — e **nenhuma contém a outra**. Num dia medido, a API trouxe 5 publicações e o portal 7; das 7, duas só existiam no portal. Noutro foi ao contrário: a API trouxe 14 contra 11 do portal, porque inclui TRT e TRF que o caderno estadual não conta.
 
@@ -124,7 +124,7 @@ Requer **Node 22+** e Windows (o agendamento usa o Agendador de Tarefas).
 npm install
 cp .env.example .env      # preencha: OAB, canais, destinos
 npm run setup:whatsapp    # QR Code, uma vez — sessão fica em .wwebjs_auth/
-npm run register-task     # tarefas das 14h, 16h, 17h e 18h
+npm run register-task     # tarefas das 8h, 13h50, 14h, 16h, 17h e 18h
 ```
 
 Para ligar o portal como segunda fonte (`PORTAL=1` no `.env`), faça o primeiro login:
@@ -143,7 +143,19 @@ O login segue **exatamente o caminho que se faz à mão**, e é isso que o robô
 
 Ir direto ao formulário de login não serve: o link de INTIMAÇÕES é que carrega a `ReturnUrl` que devolve ao Recorte Digital autenticado.
 
-Depois disso o robô **abre o Chrome sozinho** quando precisa: a sessão fica salva em `chrome-profile/` e costuma durar semanas. Você só volta a essa janela se o Cloudflare exigir o desafio — esse clique é sempre seu. O Turnstile tem dois tipos e só um precisa de gente: o não-interativo passa sozinho em alguns segundos, e o robô espera por ele antes de pedir ajuda, em vez de desistir no primeiro olhar e mandar você clicar numa caixa que já havia sumido.
+Depois disso o robô **abre o Chrome sozinho** quando precisa: a sessão fica salva em `chrome-profile/`. Você só volta a essa janela se o Cloudflare exigir o desafio — esse clique é sempre seu.
+
+### Por que existem tarefas às 8h e às 13h50
+
+O desafio da Cloudflare **não mora no portal: mora no login.** O `recortedigital` responde direto; quem cobra Turnstile é o `www`/`www2`, por onde o robô só passa quando precisa relogar. E ele precisa relogar toda tarde por um motivo simples: a sessão envelhece — medido, ela sobrevive a fechar e reabrir o Chrome, mas morre em ~19h, e às 14h do dia seguinte tem exatamente essa idade.
+
+Daí o padrão dos logs de 18 a 20/08/2026: **às 14h o portal cai no desafio, às 16h entra limpo em 7 segundos.**
+
+A tarefa das 8h (`npm run aquecer`) toca o portal e, se a sessão tiver morrido, faz o login ali — cedo, quando ainda há o dia inteiro para resolver, em vez das 14h, em cima da hora do envio.
+
+A das **13h50** existe porque um toque de manhã pode não alcançar a tarde. O cookie da sessão é um `ASP.NET_SessionId` **sem data de validade**: quem conta o tempo é o servidor, por inatividade. Medida, ela estava viva depois de 3h parada e morta depois de ~19h — o limite está em algum ponto entre os dois, e não dá para saber onde sem o código do portal. Dez minutos antes da coleta, o intervalo de inatividade fica curto o bastante para qualquer limite plausível. E se mesmo assim a sessão tiver caído, o login acontece **ali, fora do caminho crítico**: falhar às 13h50 deixa tudo como já estava; falhar às 14h custa a fonte inteira.
+
+**Não é um jeito de burlar a Cloudflare** — nada aqui resolve, forja ou contorna desafio nenhum. É o contrário: é passar pelo login no horário em que uma pessoa pode clicar. Quando o desafio é do tipo que **exige** clique, ela avisa pelos canais ligados; quando é do tipo que passa sozinho, fica quieta. A tarefa não acorda a máquina: se o PC estiver dormindo às 8h, ela roda quando ele ligar. O Turnstile tem dois tipos e só um precisa de gente: o não-interativo passa sozinho em alguns segundos, e o robô espera por ele antes de pedir ajuda, em vez de desistir no primeiro olhar e mandar você clicar numa caixa que já havia sumido.
 
 O portal é lido por um Chrome **normal**, ao qual o robô se conecta por CDP. Não é preferência de estilo: um Chrome lançado pelo Playwright é reprovado pelo Turnstile mesmo com um humano clicando na caixa — as marcas de automação entregam o navegador. Quem clica no desafio é sempre você; o robô só lê a página autenticada.
 
@@ -157,6 +169,7 @@ O portal é lido por um Chrome **normal**, ao qual o robô se conecta por CDP. N
 | `npm run checar` | Confere se o dia fechou; avisa só se não fechou |
 | `node scripts/segunda-via.js [dd/mm/aaaa]` | Reenvia por WhatsApp um dia **já enviado**, a pedido |
 | `npm run teste` | 265 verificações (prazo, união, estado, revisão, saúde, feriados, confirmação de envio) |
+| `npm run aquecer` | Renova a sessão do portal (o que a tarefa das 8h faz) |
 | `npm run abrir-chrome` | Abre a janela em `oabsp.org.br` (login + Cloudflare) |
 | `npm run inspecionar` | Conecta na janela aberta para conferir seletores |
 | `npm run setup:whatsapp` | Reconecta o WhatsApp (novo QR) |

@@ -70,7 +70,9 @@ Três guardas:
 - **não acrescenta "CNJ" em `fontes`.** A consulta foi por processo, e não prova que a inscrição advoga ali. Marcar apagaria o "❓ sua OAB não aparece no texto" justamente nas publicações em que ele mais importa;
 - **teto de 5 consultas por execução.** É a mesma API de que o envio do dia depende, e o limite dela é indocumentado: completar texto é conforto, tomar 429 é prazo.
 
-**O que continua sem solução:** publicação que exista só nos diários de **MG ou da União** não está no DJEN e continua saindo cortada — agora com aviso de corte no PDF e nos avisos do dia, em vez de silêncio.
+**O que continua sem solução** — e não é o que parecia. Escrevi aqui, antes de medir, que publicação de MG ou da União não estaria no DJEN. **Errado:** medido em 21/08 nos dias 14 a 21/08, das 5 publicações que só o portal trouxe, **4 estavam no DJEN** — incluindo uma de Minas Gerais e uma da União. O que as esconde não é o diário, é a *consulta*: a busca por inscrição não acha o que não está em nome da sua OAB.
+
+O que de fato continua cortado é outra coisa: processo com **mais de uma comunicação no mesmo dia** (a guarda se recusa a escolher — foi o caso de 21/08, o processo de MG tinha duas) e processo de **numeração antiga**, fora do padrão CNJ (`934/15`, visto em 20/08), onde consultar por número nem se aplica. As duas saem com aviso de corte, em vez de silêncio.
 
 ### ~~4. Prazo também no e-mail~~ — FEITO em 12/08/2026
 

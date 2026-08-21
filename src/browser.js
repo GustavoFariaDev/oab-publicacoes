@@ -111,6 +111,23 @@ export async function desafioCloudflarePersiste(page, timeoutMs = config.cloudfl
 }
 
 /**
+ * O desafio na tela pede CLIQUE de gente?
+ *
+ * O Turnstile tem dois tipos e a diferenca decide quem resolve: o interativo
+ * mostra a caixa "Confirme que e humano" e espera o usuario; o nao-interativo
+ * nao tem nada em que clicar e passa sozinho em alguns segundos. Sao problemas
+ * diferentes — um pede alguem, o outro pede tempo — e trata-los igual foi o
+ * que fez o robo mandar o usuario clicar numa caixa que nao existia.
+ */
+export async function desafioPedeClique(page) {
+  return (
+    (await page
+      .locator('iframe[src*="challenges.cloudflare.com"], .cf-turnstile, #cf-turnstile')
+      .count()) > 0
+  );
+}
+
+/**
  * Guarda o que se via na tela quando o desafio nao passou.
  *
  * Existe porque a falha das 14h nao deixava rastro nenhum: o log dizia
@@ -129,10 +146,7 @@ async function registrarDesafio(page, esperouMs) {
     // O interativo tem a caixa "Confirme que e humano" (widget do Turnstile);
     // o nao-interativo nao tem nada em que clicar. Sao problemas diferentes:
     // um espera o usuario, o outro so espera. Dizer qual e os separa.
-    dados.interativo =
-      (await page
-        .locator('iframe[src*="challenges.cloudflare.com"], .cf-turnstile, #cf-turnstile')
-        .count()) > 0;
+    dados.interativo = await desafioPedeClique(page);
   } catch (e) {
     dados.erroLeitura = e.message;
   }
