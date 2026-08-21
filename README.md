@@ -52,10 +52,14 @@ Ela reconfere **só a API do CNJ**, e isso está escrito na mensagem que sai. O 
 Três regras que a mantêm honesta:
 
 - **roda depois do dia corrente**, nunca antes — o envio das 14h não espera a conferência de ontem, e um erro da revisão não é apagado pelo sucesso do dia;
-- **entrega parcial não é registrada**: se um canal falha, os ids não entram no estado e o run seguinte manda tudo de novo, para todos. Duplicata é chateação; publicação faltando é prazo;
+- **entrega parcial fica registrada com nome**: se um canal falha, os ids entram no estado junto com *quem* já está em dia, e o run seguinte reenvia só para o canal que ficou para trás — a mesma regra do dia corrente. Antes nada era gravado, e um canal permanentemente caído fazia os três runs do dia remandarem o mesmo PDF pelo canal que funcionava, enquanto o caído perdia o complemento de vez quando o dia saía da janela;
 - **não reescreve o passado**: os números do dia sobem pelo tanto que entrou, e um dia que fechou com o portal caído continua marcado assim — uma conferência que não olhou o portal não tem como absolvê-lo.
 
-Numa instalação nova, sem nenhum dia no `state.json`, a revisão não roda: estado vazio significa "nunca rodou", não "falhou ontem".
+Numa instalação nova, sem nenhum dia no `state.json`, a revisão não roda: estado vazio significa "nunca rodou", não "falhou ontem". Essa medida é tirada **antes** de o dia corrente ser gravado — senão o histórico estaria sempre cheio e a porta nunca fecharia.
+
+A conferência custa **uma consulta** por dia revisado. A varredura das seis variantes de sufixo da inscrição só dispara em dia que nunca saiu: num dia já entregue, base vazia apenas confirma o que o estado sabe, e as seis consultas extras comprariam risco de 429 justamente na fonte de que o envio do dia corrente depende.
+
+Dia que a revisão **cria do zero** — o robô estava desligado naquele dia — nasce marcado como incompleto quando o portal está ligado: ele nunca foi consultado ali, e os diários de MG e da União só existem por ele. A mensagem também distingue os dois casos, porque as consequências são opostas: "entrou no diário depois do último envio" é complemento; "o robô não rodou naquele dia" é um dia inteiro que pede conferência à mão.
 
 ## As duas fontes
 
@@ -121,7 +125,7 @@ O login segue **exatamente o caminho que se faz à mão**, e é isso que o robô
 
 Ir direto ao formulário de login não serve: o link de INTIMAÇÕES é que carrega a `ReturnUrl` que devolve ao Recorte Digital autenticado.
 
-Depois disso o robô **abre o Chrome sozinho** quando precisa: a sessão fica salva em `chrome-profile/` e costuma durar semanas. Você só volta a essa janela se o Cloudflare exigir o desafio — esse clique é sempre seu.
+Depois disso o robô **abre o Chrome sozinho** quando precisa: a sessão fica salva em `chrome-profile/` e costuma durar semanas. Você só volta a essa janela se o Cloudflare exigir o desafio — esse clique é sempre seu. O Turnstile tem dois tipos e só um precisa de gente: o não-interativo passa sozinho em alguns segundos, e o robô espera por ele antes de pedir ajuda, em vez de desistir no primeiro olhar e mandar você clicar numa caixa que já havia sumido.
 
 O portal é lido por um Chrome **normal**, ao qual o robô se conecta por CDP. Não é preferência de estilo: um Chrome lançado pelo Playwright é reprovado pelo Turnstile mesmo com um humano clicando na caixa — as marcas de automação entregam o navegador. Quem clica no desafio é sempre você; o robô só lê a página autenticada.
 
@@ -133,13 +137,22 @@ O portal é lido por um Chrome **normal**, ao qual o robô se conecta por CDP. N
 | `npm run once` | Pipeline completo agora, com envio real |
 | `npm run once -- --data=07/08/2026` | Força uma data específica |
 | `npm run checar` | Confere se o dia fechou; avisa só se não fechou |
-| `npm run teste` | 212 verificações (prazo, união, estado, revisão, saúde, feriados, confirmação de envio) |
-| `npm run abrir-chrome` | Abre a janela do portal (login + Cloudflare) |
+| `node scripts/segunda-via.js [dd/mm/aaaa]` | Reenvia por WhatsApp um dia **já enviado**, a pedido |
+| `npm run teste` | 220 verificações (prazo, união, estado, revisão, saúde, feriados, confirmação de envio) |
+| `npm run abrir-chrome` | Abre a janela em `oabsp.org.br` (login + Cloudflare) |
 | `npm run inspecionar` | Conecta na janela aberta para conferir seletores |
 | `npm run setup:whatsapp` | Reconecta o WhatsApp (novo QR) |
 | `npm run register-task` | (Re)cria as tarefas agendadas |
 
 Flags: `--dry`, `--data=dd/mm/aaaa` (data pontual — não dispara a revisão da véspera), `--retry` (coleta e só envia o que for novo), `--variantes` (varre os sufixos de inscrição da OAB).
+
+### Segunda via
+
+`node scripts/segunda-via.js 18/08/2026` reenvia um dia que **já saiu**, quando alguém pede a mensagem de novo. Ela é deliberadamente marginal ao pipeline:
+
+- **não escreve no `state.json`.** O dia já está gravado; forçar um envio por ali corromperia justamente o registro que decide o que ainda falta entregar;
+- **não é complemento.** Complemento é "o que não estava no envio anterior"; aqui vai o dia inteiro, e tudo já foi entregue uma vez. O PDF e a mensagem dizem isso na primeira linha, para ninguém ler prazo novo onde não há;
+- **não sobrescreve o PDF do dia.** Ele é o registro do que saiu na hora certa; a segunda via sai como arquivo separado, com a hora no nome.
 
 ## Estado
 
@@ -151,6 +164,7 @@ Flags: `--dry`, `--data=dd/mm/aaaa` (data pontual — não dispara a revisão da
 - [x] Revisão do dia útil anterior na API do CNJ, antes de cuidar do dia de hoje
 - [x] Contagem de prazo, com feriado por comarca
 - [x] Checagem diária que avisa quando o dia não fecha
+- [x] Segunda via a pedido, que não toca no estado nem no PDF do dia
 
 Pendências e prioridade em **[docs/PENDENCIAS.md](docs/PENDENCIAS.md)**.
 
